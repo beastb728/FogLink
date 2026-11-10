@@ -13,10 +13,10 @@ prevent crashes; nothing here should be presented as doing so.
 |---|---|
 | Relay (`server/`, Go + WebSockets, Redis or in-memory lookups) | Built, tested, packaged as a 21 MB Docker image |
 | Simulator and live map dashboard (`sim/`) | Built and tested: up to 2,000 virtual vehicles on the real NH-48 and Yamuna Expressway lines, crash injection, with-vs-without A/B |
-| Phone client (`sim/phone.html`, web) | Built: Fog mode, map matching, braking detection, Hindi/English voice alerts at three levels, drive logger. Tested in a desktop browser in demo mode only, not yet on a phone in a car |
+| Phone client (`sim/phone.html`, web) | Built: Fog mode, map matching, braking detection, Hindi/English voice alerts at three levels, drive logger. Tested in demo mode in a desktop browser and on one phone (OnePlus 11R, Chrome, relay over Wi-Fi): spoken alerts work. Not yet tested in a car |
 | ML pipeline (`ml/`) | Built: orientation alignment, GPS auto-labels, threshold baseline, 1D-CNN. Trained and scored on synthetic drives only |
 | Road data (`data/`) | Both corridors, both carriageways, from OpenStreetMap |
-| Android app (`android/`, Kotlin) | Built: foreground service, sensors + GPS, threshold braking detector, relay link, Hindi/English voice alerts, drive logger. Logic verified against the JavaScript reference by unit tests. Smoke-tested in an emulator (launch, Fog mode, map matching, Warning and BRAKE alerts from relay events); not yet run on a real phone |
+| Android app (`android/`, Kotlin) | Built: foreground service, sensors + GPS, threshold braking detector, relay link, Hindi/English voice alerts, drive logger. Logic verified against the JavaScript reference by unit tests. Smoke-tested in an emulator (launch, Fog mode, map matching, Warning and BRAKE alerts from relay events). On one real phone (OnePlus 11R, relay over Wi-Fi): install, foreground service, GPS, relay link and spoken alerts work, the alerts using the app's demo position. Braking detection from the motion sensors has not been tried in a moving car |
 | TFLite export | **Not run** (needs `ai-edge-torch`); TorchScript is exported, and the Android app uses the threshold detector |
 | Direct phone-to-phone radio | Not started (v2) |
 
@@ -187,7 +187,7 @@ vectors generated from the JavaScript and must match exactly.
 ## Known gaps
 
 - **Road lines.** The Yamuna Expressway has a 5.6 km stretch near Agra that OpenStreetMap tags under another name; it is bridged with a straight segment, so distances there are slightly short. The Yamuna lines measure 178 km because the tagged road runs past the 165 km expressway proper.
-- **Phone client.** Untested on a real phone. Hindi speech depends on the phone having a Hindi voice installed.
+- **Phones.** Tested indoors on one phone with a pretend position only: nothing has been tested in a moving vehicle or over mobile data. Hindi speech depends on the phone having a Hindi voice installed.
 - **Slow-traffic events** fire below 30 km/h within a minute of expressway speed, so toll plazas will trigger heads-ups today.
 - **ML numbers are synthetic.** Train on logged drives with `make ml DRIVES="data/drives/*.csv"`.
 - **Relay** is single-instance. Redis shares positions between instances but alerts are only pushed to phones connected to the instance that received the event.

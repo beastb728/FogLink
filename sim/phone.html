@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0e1218" />
+  <title>FogLink</title>
+  <style>
+    :root { --bg:#0e1218; --panel:#161c25; --line:#263040; --text:#e6ebf2; --muted:#8d99ab; --accent:#4aa8ff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+    body { padding: 16px; padding-bottom: 32px; max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 4px 0 2px; } .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+    #fog { width: 100%; padding: 28px 16px; border-radius: 16px; border: 2px solid var(--line); background: var(--panel); color: var(--text); font-size: 24px; font-weight: 700; }
+    #fog.on { background: #12324f; border-color: var(--accent); }
+    #fog small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 6px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+    .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+    .tile b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tile span { color: var(--muted); font-size: 12px; }
+    .tile.wide { grid-column: 1 / -1; } .tile.wide b { font-size: 16px; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 20px 0 6px; }
+    .seg { display: flex; } .seg button { flex: 1; padding: 12px 6px; background: var(--panel); color: var(--muted); border: 1px solid var(--line); font: inherit; margin-left: -1px; }
+    .seg button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; } .seg button:last-child { border-radius: 0 8px 8px 0; }
+    .seg button.on { background: #22344b; color: var(--text); border-color: var(--accent); position: relative; }
+    select, input[type=number] { width: 100%; padding: 10px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    label { color: var(--muted); font-size: 12px; display: block; }
+    button.act { width: 100%; padding: 14px; margin-top: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; }
+    button.act.red { border-color: #ff4d4f; color: #ffb3b4; }
+    #log { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 8px; min-height: 60px; font-variant-numeric: tabular-nums; }
+    .note { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 20px; }
+    #alert { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px; font-weight: 800; z-index: 10; }
+    #alert.l1 { display: flex; background: #1c2a3ddd; font-size: 34px; }
+    #alert.l2 { display: flex; background: #b87400; color: #fff; font-size: 40px; }
+    #alert.l3 { display: flex; background: #e11d1d; color: #fff; font-size: 96px; animation: flash .35s steps(2) infinite; }
+    @keyframes flash { 50% { background: #fff; color: #e11d1d; } }
+    @media (prefers-reduced-motion: reduce) { #alert.l3 { animation: none; } }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>FogLink</h1>
+  <p class="sub">Warns you by voice when a vehicle ahead in fog brakes hard or stops. An aid only: it cannot see every hazard and does not replace your own eyes and brakes.</p>
+
+  <button id="fog">Fog mode is off<small>Tap once before you set off. Then leave the phone alone.</small></button>
+
+  <div class="grid">
+    <div class="tile"><b id="speed">–</b><span>km/h</span></div>
+    <div class="tile"><b id="link">offline</b><span>relay</span></div>
+    <div class="tile wide"><b id="road">–</b><span id="roadSub">road</span></div>
+    <div class="tile"><b id="sensor">–</b><span>braking sensor</span></div>
+    <div class="tile"><b id="delay">–</b><span>alert delay, median / 95%</span></div>
+  </div>
+
+  <h2>Voice</h2>
+  <div class="seg" id="lang"><button data-v="en" class="on">English</button><button data-v="hi">हिन्दी</button></div>
+  <h2>How far can you see?</h2>
+  <div class="seg" id="vis"><button data-v="200">200 m</button><button data-v="50" class="on">50 m</button><button data-v="20">20 m</button></div>
+
+  <h2>Position</h2>
+  <div class="seg" id="source"><button data-v="gps" class="on">Phone GPS</button><button data-v="demo">Demo (no driving)</button></div>
+  <div id="demo" hidden>
+    <label style="margin-top:8px">Carriageway<select id="cw"></select></label>
+    <div class="two">
+      <label>At km<input id="km" type="number" step="0.1" value="62.5" /></label>
+      <label>Pretend speed, km/h<input id="kmh" type="number" step="5" value="80" /></label>
+    </div>
+    <button class="act red" id="brake">Pretend I just braked hard</button>
+  </div>
+
+  <h2>Drive logger</h2>
+  <button class="act" id="rec">Start recording sensors</button>
+  <div id="log"></div>
+
+  <p class="note">No account, no name, no phone number. While Fog mode is on, the phone sends its road, distance along it and speed under a random ID that changes every 10 minutes. The relay forgets it within seconds. Recordings stay on this phone until you save the file yourself.</p>
+
+  <div id="alert"></div>
+  <script type="module" src="/src/phone/main.js"></script>
+</body>
+</html>

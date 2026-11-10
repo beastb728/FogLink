@@ -1,0 +1,10 @@
+# raw OSM downloads and logged drives never leave the machine
+data/raw/
+data/drives/
+node_modules/
+sim/dist/
+server/foglink-relay
+ml/out/
+__pycache__/
+*.pem
+.claude/

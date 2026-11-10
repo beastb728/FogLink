@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FogLink Simulator</title>
+  <link rel="stylesheet" href="/src/dashboard/style.css" />
+</head>
+<body>
+  <header>
+    <h1>FogLink <span>simulator</span></h1>
+    <div class="row">
+      <select id="road" title="Carriageway"></select>
+      <label class="inline">from km <input id="startKm" type="number" min="0" step="1" value="40" /></label>
+      <span id="relay" class="chip off">Relay offline</span>
+      <a class="chip link" href="/phone.html" target="_blank" title="Opens a demo phone placed 800 m behind the incident point">Open a phone 800 m back</a>
+    </div>
+  </header>
+
+  <main>
+    <aside id="controls">
+      <div class="buttons">
+        <button id="play" class="primary">Start</button>
+        <button id="crash" class="danger" title="Stop one vehicle in every lane. You can also click a point on either strip.">Stop a vehicle</button>
+        <button id="reset">Reset</button>
+      </div>
+      <div class="seg" id="speed">
+        <button data-v="1" class="on">1×</button><button data-v="4">4×</button><button data-v="16">16×</button>
+      </div>
+
+      <h2>Fog</h2>
+      <div class="seg" id="visPreset">
+        <button data-v="200">200 m</button><button data-v="50" class="on">50 m</button><button data-v="20">20 m</button>
+      </div>
+      <label>Visibility <output></output><input id="visibility" type="range" min="10" max="400" step="5" value="50" data-unit=" m" /></label>
+
+      <h2>Traffic</h2>
+      <label>Vehicles <output></output><input id="vehicles" type="range" min="100" max="2000" step="50" value="1000" /></label>
+      <label>Density <output></output><input id="density" type="range" min="4" max="20" step="1" value="10" data-unit=" /km/lane" /></label>
+      <label>Trucks <output></output><input id="trucks" type="range" min="0" max="80" step="5" value="30" data-unit="%" /></label>
+      <label>Buses <output></output><input id="buses" type="range" min="0" max="40" step="5" value="10" data-unit="%" /></label>
+
+      <h2>Drivers</h2>
+      <label>Reaction time <output></output><input id="reactionMean" type="range" min="0.8" max="2.5" step="0.1" value="1.5" data-unit=" s" /></label>
+      <label title="Stopping distance at the speed drivers choose, as a multiple of what they can see">Overdriving sight <output></output><input id="overdrive" type="range" min="1" max="4" step="0.1" value="2" data-unit="×" /></label>
+
+      <h2>FogLink</h2>
+      <label>Vehicles running it <output></output><input id="penetration" type="range" min="0" max="100" step="5" value="50" data-unit="%" /></label>
+      <label>Network delay <output></output><input id="netLatency" type="range" min="0.05" max="2" step="0.05" value="0.3" data-unit=" s" /></label>
+      <label>Driver acts after <output></output><input id="alertReaction" type="range" min="0.5" max="3" step="0.1" value="1" data-unit=" s" /></label>
+      <label>Drivers who act <output></output><input id="compliance" type="range" min="0" max="100" step="5" value="90" data-unit="%" /></label>
+      <label>Seed <output></output><input id="seed" type="range" min="1" max="50" step="1" value="1" /></label>
+    </aside>
+
+    <section id="stage">
+      <div id="mapWrap">
+        <div id="map"></div>
+        <div class="seg" id="mapArm"><button data-v="fog" class="on">With FogLink</button><button data-v="base">Without</button></div>
+        <div id="legend">
+          <span><i style="background:#8a94a6"></i>no FogLink</span>
+          <span><i style="background:#4aa8ff"></i>FogLink</span>
+          <span><i style="background:#ffc53d"></i>alerted</span>
+          <span><i style="background:#ff8a1f"></i>told to brake</span>
+          <span><i style="background:#ff4d4f"></i>crashed</span>
+          <span><i class="ring"></i>real phone</span>
+        </div>
+      </div>
+
+      <div class="arms">
+        <div class="arm">
+          <div class="armHead"><h3>Without FogLink</h3><div class="stats" id="statsBase"></div></div>
+          <canvas id="stripBase"></canvas>
+        </div>
+        <div class="arm">
+          <div class="armHead"><h3>With FogLink</h3><div class="stats" id="statsFog"></div></div>
+          <canvas id="stripFog"></canvas>
+        </div>
+        <div id="clock"></div>
+      </div>
+
+      <div class="lower">
+        <div class="card">
+          <div class="cardHead">
+            <h3>Repeat over many runs</h3>
+            <button id="batch">Run 10 seeds × 3 fog levels</button>
+          </div>
+          <p class="muted" id="batchNote">One run is one roll of the dice. This repeats the current settings with ten different traffic layouts at 20, 50 and 200 m visibility, each with and without FogLink, all lanes blocked 20 s in.</p>
+          <div id="batchOut"></div>
+        </div>
+        <div class="card">
+          <h3>What these numbers assume</h3>
+          <p class="muted">Simulated, not measured on a road. The result moves most with how drivers respond to an alert and how many vehicles run FogLink.</p>
+          <ul id="assumptions"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/src/dashboard/main.js"></script>
+</body>
+</html>

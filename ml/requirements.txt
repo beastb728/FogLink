@@ -1,0 +1,5 @@
+numpy
+scipy
+torch
+# optional, for the TFLite export:
+# ai-edge-torch

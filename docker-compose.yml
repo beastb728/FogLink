@@ -1,0 +1,12 @@
+# Relay + Redis + the built dashboard and phone client on http://localhost:8080
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"] # nothing is ever written to disk
+  relay:
+    build: { context: ., dockerfile: server/Dockerfile }
+    environment:
+      FOGLINK_REDIS: redis:6379
+      FOGLINK_OBSERVER_TOKEN: ${FOGLINK_OBSERVER_TOKEN:-dev} # lets the dashboard show real phones; set your own outside a demo
+    ports: ["8080:8080"]
+    depends_on: [redis]

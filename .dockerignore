@@ -1,0 +1,9 @@
+.git
+.claude
+android
+ml
+data/raw
+data/drives
+**/node_modules
+sim/dist
+server/foglink-relay

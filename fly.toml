@@ -1,0 +1,27 @@
+# Public relay on Fly.io: relay + dashboard + web phone client behind Fly's HTTPS.
+# First time:  fly launch --copy-config --no-deploy   (pick your own app name)
+# Deploy:      fly deploy --ha=false
+# The relay keeps positions in memory, so it must run as exactly one machine.
+app = "foglink-relay"
+primary_region = "bom" # Mumbai
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off" # phones hold a WebSocket open; never stop under them
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -58,6 +58,25 @@ has no such limit: it runs as a foreground service. Testing rules from the proje
 tests only in empty lots at low speed, and on real roads the tester is a
 passenger.
 
+### A public relay (Fly.io)
+
+`fly.toml` runs the same Docker image in Mumbai behind Fly's HTTPS, as a single
+machine (the relay holds positions in memory, so it must not be scaled out).
+Needs the `fly` command and a Fly.io account.
+
+```bash
+fly launch --copy-config --no-deploy
+```
+
+```bash
+fly deploy --ha=false
+```
+
+Phones then use `wss://<app>.fly.dev/ws` (Android app) or
+`https://<app>.fly.dev/phone.html` (browser). The dashboard's live view of real
+phones stays off unless you set a token: `fly secrets set FOGLINK_OBSERVER_TOKEN=<your own>`
+and open the dashboard with `?token=<the same>`. Not yet deployed or tested.
+
 ## How it fits together
 
 ```

@@ -49,4 +49,18 @@ class Prefs(ctx: Context) {
     var relayUrl: String
         get() = p.getString("relay", BuildConfig.DEFAULT_RELAY)!!
         set(v) = p.edit().putString("relay", v).apply()
+
+    // Desk testing: a pretend position on a road instead of GPS
+    var demo: Boolean
+        get() = p.getBoolean("demo", false)
+        set(v) = p.edit().putBoolean("demo", v).apply()
+    var demoCw: String
+        get() = p.getString("demoCw", "nh48:jaipur")!!
+        set(v) = p.edit().putString("demoCw", v).apply()
+    var demoKm: Float
+        get() = p.getFloat("demoKm", 40f)
+        set(v) = p.edit().putFloat("demoKm", v).apply()
+    var demoKmh: Int
+        get() = p.getInt("demoKmh", 80)
+        set(v) = p.edit().putInt("demoKmh", v).apply()
 }

@@ -71,6 +71,8 @@ class FogService : Service(), SensorEventListener, LocationListener {
     private var gyroRate: Double? = null
     private val delays = ArrayDeque<Long>()
     private var fogOn = false
+    private var demo = false // pretend position for desk testing; GPS and motion sensors are ignored
+    private var demoAt = 0L
     private var rec: BufferedWriter? = null
     private var recRows = 0
 
@@ -94,6 +96,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
             ACTION_FOG_OFF -> stopFog()
             ACTION_REC_ON -> startRecording()
             ACTION_REC_OFF -> stopRecording()
+            ACTION_TEST_BRAKE -> handler.post { if (fogOn && demo) sendStop(BrakeEvent("brake", 0.6 * Alert.G, "test")) }
         }
         if (!fogOn && !FogState.recording) stopSelf()
         return START_STICKY
@@ -134,6 +137,14 @@ class FogService : Service(), SensorEventListener, LocationListener {
         fogOn = true
         FogState.on = true
         detector.reset()
+        demo = prefs.demo
+        if (demo) {
+            cw = roads.firstOrNull { it.id == prefs.demoCw }
+            s = (prefs.demoKm * 1000.0).coerceIn(0.0, cw?.length ?: 0.0)
+            speed = prefs.demoKmh / 3.6
+            demoAt = SystemClock.elapsedRealtime()
+            FogState.say("Demo position: not using GPS")
+        } else speed = 0.0
         startSensing()
         link = RelayLink(prefs.relayUrl, { m -> handler.post { onAlert(m) } }, { publish() })
         tone = try { ToneGenerator(AudioManager.STREAM_ALARM, 100) } catch (e: RuntimeException) { null }
@@ -180,7 +191,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
             return
         }
         val (x, y, z) = e.values
-        if (fogOn) detector.motion(t, x.toDouble(), y.toDouble(), z.toDouble(), gyroRate)?.let { sendStop(it) }
+        if (fogOn && !demo) detector.motion(t, x.toDouble(), y.toDouble(), z.toDouble(), gyroRate)?.let { sendStop(it) }
         rec?.let {
             it.write("$t,m,$x,$y,$z,${lastGyro[0]},${lastGyro[1]},${lastGyro[2]},,,,,\n")
             recRows++
@@ -193,6 +204,11 @@ class FogService : Service(), SensorEventListener, LocationListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     override fun onLocationChanged(loc: Location) {
+        rec?.let {
+            it.write("${loc.time},g,,,,,,,${loc.latitude},${loc.longitude},${if (loc.hasSpeed()) loc.speed else ""},${if (loc.hasBearing()) loc.bearing else ""},${loc.accuracy}\n")
+            recRows++
+        }
+        if (fogOn && demo) return
         fixAt = System.currentTimeMillis()
         speed = if (loc.hasSpeed()) loc.speed.toDouble() else 0.0
         // Direction of travel: from the last two fixes when the phone has moved far enough
@@ -211,10 +227,6 @@ class FogService : Service(), SensorEventListener, LocationListener {
         cw = m?.cw
         if (m != null) s = m.s
         if (fogOn) detector.gps(loc.time, speed, heading)?.let { sendStop(it) }
-        rec?.let {
-            it.write("${loc.time},g,,,,,,,${loc.latitude},${loc.longitude},${if (loc.hasSpeed()) loc.speed else ""},${if (loc.hasBearing()) loc.bearing else ""},${loc.accuracy}\n")
-            recRows++
-        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -229,6 +241,15 @@ class FogService : Service(), SensorEventListener, LocationListener {
             if (now - idAt > ID_ROTATE_MS) {
                 id = RelayLink.randomId()
                 idAt = now
+            }
+            if (fogOn && demo) {
+                // drive the pretend vehicle forward at its set speed, stopping at the end of the road
+                val t = SystemClock.elapsedRealtime()
+                val end = cw?.length ?: 0.0
+                s = minOf(end, s + speed * (t - demoAt) / 1000.0)
+                if (s >= end) speed = 0.0
+                demoAt = t
+                fixAt = now
             }
             if (now - fixAt > 5000) cw = null // GPS went quiet
             val road = cw
@@ -324,11 +345,11 @@ class FogService : Service(), SensorEventListener, LocationListener {
 
     private fun publish() {
         FogState.speedKmh = if (fogOn) (speed * 3.6).roundToInt() else -1
-        FogState.road = cw?.let { "${it.roadName} → ${it.towards}" }
+        FogState.road = cw?.let { "${it.roadName} → ${it.towards}" + if (fogOn && demo) " (demo)" else "" }
         FogState.km = s / 1000
         FogState.relayOpen = link?.open == true
         FogState.rttMs = link?.rttMs ?: -1
-        FogState.sensor = if (!fogOn) "–" else if (detector.aligned) "motion + GPS" else "GPS only"
+        FogState.sensor = if (!fogOn) "–" else if (demo) "off (demo position)" else if (detector.aligned) "motion + GPS" else "GPS only"
         FogState.changed()
     }
 
@@ -350,6 +371,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
         const val ACTION_FOG_OFF = "app.foglink.FOG_OFF"
         const val ACTION_REC_ON = "app.foglink.REC_ON"
         const val ACTION_REC_OFF = "app.foglink.REC_OFF"
+        const val ACTION_TEST_BRAKE = "app.foglink.TEST_BRAKE"
         private const val CHANNEL = "fog"
         private const val ID_ROTATE_MS = 10 * 60 * 1000L
     }

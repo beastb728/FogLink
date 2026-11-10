@@ -28,6 +28,17 @@ Unit tests:
 2. In the app, set **Relay address** to `ws://<that machine>:8080/ws` (use `wss://` behind TLS). The default, `ws://10.0.2.2:8080/ws`, is the development machine as seen from the Android emulator.
 3. Pick the voice language and how far you can see, then tap **Fog mode** and allow precise location.
 
+### Testing indoors
+
+Away from the two corridors the app reports "not on a FogLink road" and the relay
+sends it nothing. Under **Position** choose **Demo (desk test)**, pick a road, a
+starting kilometre and a speed, then switch Fog mode on. The app then pretends to
+drive along that road: GPS and the braking sensor are ignored, everything else
+(service, relay link, alert rule, voice, tone, vibration) is the real thing. To
+hear an alert, start the dashboard simulation, press **Stop a vehicle**, and start
+the demo about 0.8 km before the kilometre shown in the dashboard's phone link.
+**Pretend I just braked hard** sends a real stop event from the demo position.
+
 **Start recording sensors** writes motion sensors (100 Hz) and GPS to a CSV in the
 app's own files folder (`Android/data/app.foglink/files/drives/`). `ml/` reads
 that format directly: `make ml DRIVES="data/drives/*.csv"`.

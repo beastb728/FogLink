@@ -37,6 +37,10 @@ class MainActivity : Activity() {
     private lateinit var rec: Button
     private lateinit var overlay: TextView
     private lateinit var relay: EditText
+    private lateinit var demoBox: LinearLayout
+    private lateinit var demoKm: EditText
+    private lateinit var demoKmh: EditText
+    private lateinit var testBrake: Button
     private val segments = mutableListOf<() -> Unit>()
     private val ui = Handler(Looper.getMainLooper())
     private var pending: String? = null
@@ -117,6 +121,47 @@ class MainActivity : Activity() {
         col.addView(label("How far can you see?"))
         col.addView(segment(listOf("200" to "200 m", "50" to "50 m", "20" to "20 m"), { prefs.visibility.toString() }) { prefs.visibility = it.toInt() })
 
+        col.addView(label("Position"))
+        col.addView(segment(listOf("gps" to "Phone GPS", "demo" to "Demo (desk test)"), { if (prefs.demo) "demo" else "gps" }) {
+            prefs.demo = it == "demo"
+            render()
+        })
+        demoBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        demoBox.addView(TextView(this).apply {
+            this.text = "Pretends this phone is driving along the road below, so alerts can be tested indoors. Takes effect the next time Fog mode is switched on."
+            setTextColor(muted); textSize = 12f; setPadding(0, dp(8), 0, dp(8))
+        })
+        val pickRoad: (String) -> Unit = { prefs.demoCw = it }
+        demoBox.addView(segment(listOf("nh48:jaipur" to "NH-48 → Jaipur", "nh48:delhi" to "NH-48 → Delhi"), { prefs.demoCw }, pickRoad))
+        demoBox.addView(segment(listOf("yamuna:agra" to "Yamuna → Agra", "yamuna:greater-noida" to "Yamuna → Gr. Noida"), { prefs.demoCw }, pickRoad),
+            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(4) })
+        fun number(value: String, hint: String, decimal: Boolean) = EditText(this).apply {
+            setText(value)
+            this.hint = hint
+            setTextColor(ink); setHintTextColor(muted); textSize = 14f
+            inputType = InputType.TYPE_CLASS_NUMBER or (if (decimal) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0)
+            background = box(panel, line); setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        demoKm = number(prefs.demoKm.toString(), "km", true)
+        demoKmh = number(prefs.demoKmh.toString(), "km/h", false)
+        val numbers = LinearLayout(this)
+        for ((title, field) in listOf("Start at km" to demoKm, "Speed, km/h" to demoKmh)) {
+            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            cell.addView(TextView(this).apply { this.text = title; setTextColor(muted); textSize = 12f; setPadding(0, dp(10), 0, dp(4)) })
+            cell.addView(field)
+            numbers.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = dp(4) })
+        }
+        demoBox.addView(numbers)
+        testBrake = Button(this).apply {
+            this.text = "Pretend I just braked hard"
+            isAllCaps = false
+            setTextColor(ink)
+            background = box(panel, line)
+            setOnClickListener { if (FogState.on) send(FogService.ACTION_TEST_BRAKE) }
+        }
+        demoBox.addView(testBrake, LinearLayout.LayoutParams(MATCH_PARENT, dp(52)).apply { topMargin = dp(8) })
+        col.addView(demoBox)
+
         col.addView(label("Relay address"))
         relay = EditText(this).apply {
             setText(prefs.relayUrl)
@@ -156,14 +201,20 @@ class MainActivity : Activity() {
         render()
     }
 
+    private fun saveFields() {
+        prefs.relayUrl = relay.text.toString().trim()
+        demoKm.text.toString().toFloatOrNull()?.let { prefs.demoKm = it }
+        demoKmh.text.toString().toIntOrNull()?.let { prefs.demoKmh = it.coerceIn(0, 160) }
+    }
+
     override fun onPause() {
         FogState.listener = null
-        prefs.relayUrl = relay.text.toString().trim()
+        saveFields()
         super.onPause()
     }
 
     private fun send(action: String) {
-        prefs.relayUrl = relay.text.toString().trim()
+        saveFields()
         val i = Intent(this, FogService::class.java).setAction(action)
         if (action == FogService.ACTION_FOG_ON || action == FogService.ACTION_REC_ON) startForegroundService(i) else startService(i)
     }
@@ -192,6 +243,10 @@ class MainActivity : Activity() {
         fog.setTextColor(ink)
         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         relay.isEnabled = !on
+        demoBox.visibility = if (prefs.demo) View.VISIBLE else View.GONE
+        demoKm.isEnabled = !on
+        demoKmh.isEnabled = !on
+        testBrake.alpha = if (on) 1f else 0.4f
         val road = FogState.road
         status.text = listOf(
             "Speed: " + (if (FogState.speedKmh >= 0) "${FogState.speedKmh} km/h" else "–"),

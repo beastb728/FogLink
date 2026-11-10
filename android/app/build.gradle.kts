@@ -20,9 +20,10 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
-        // 10.0.2.2 is the development machine as seen from the Android emulator.
+        // The public relay. For a relay on the development machine use ws://10.0.2.2:8080/ws
+        // from the emulator, or ws://<its LAN address>:8080/ws from a phone on the same Wi-Fi.
         // On a real phone, type the relay's address on the main screen.
-        buildConfigField("String", "DEFAULT_RELAY", "\"ws://10.0.2.2:8080/ws\"")
+        buildConfigField("String", "DEFAULT_RELAY", "\"wss://foglink-relay.fly.dev/ws\"")
     }
     buildFeatures { buildConfig = true }
     sourceSets["main"].assets.srcDir(roadAssets)

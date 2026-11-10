@@ -75,7 +75,14 @@ fly deploy --ha=false
 Phones then use `wss://<app>.fly.dev/ws` (Android app) or
 `https://<app>.fly.dev/phone.html` (browser). The dashboard's live view of real
 phones stays off unless you set a token: `fly secrets set FOGLINK_OBSERVER_TOKEN=<your own>`
-and open the dashboard with `?token=<the same>`. Not yet deployed or tested.
+and open the dashboard with `?token=<the same>`.
+
+A deployment is running at https://foglink-relay.fly.dev (Singapore; Mumbai was
+not offered). Checked from one home broadband connection in India: 10 of 10 test
+events reached a client 600 m behind, none reached the opposite carriageway, and
+event-to-alert took 318 to 381 ms (median 323 ms) across both network hops. That
+is inside the 500 ms target with little to spare, and mobile data on a highway
+will be slower; a relay in India would cut it.
 
 ## How it fits together
 
@@ -122,7 +129,7 @@ measured, and on what.
 |---|---|---|---|
 | Braking detection precision / recall | over 90% / over 95% | CNN 92.8% / 98.7%; threshold baseline 93.8% / 94.7% | Synthetic drives, 15 held out, 75 episodes, GPS-derived labels |
 | Earlier than GPS | over 300 ms | CNN 1,640 ms median (1,170 ms at the worst 10%); baseline 1,410 ms | Same synthetic drives. The synthetic GPS lags the vehicle by 0.5 to 1.1 s by construction, so this mostly measures that assumption |
-| Event to alert, 95% of alerts | under 500 ms | Relay fan-out to 1,000 phones: p95 14 ms in memory, 32 ms via Redis | One machine, loopback. Excludes both mobile-network hops, which will dominate. The phone client shows the true end-to-end delay live once two phones are on the road |
+| Event to alert, 95% of alerts | under 500 ms | Relay fan-out to 1,000 phones: p95 14 ms in memory, 32 ms via Redis. Through the public relay in Singapore: median 323 ms, worst 381 ms of 10 | Fan-out: one machine, loopback, excluding the network. Public relay: both hops over one home broadband line in India, 10 events, not mobile data. The phone client shows the true end-to-end delay live once two phones are on the road |
 | False alarms per 100 km | under 1 | CNN 6.3, baseline 3.7 | Synthetic drives with speed breakers, potholes, toll stops and phone moves. **Misses the target** |
 | Battery drain per hour | under 5% | Not measured | Needs the Android app on real phones |
 | Pileup reduction in simulation | report as measured | Table below | Simulator, assumptions stated |

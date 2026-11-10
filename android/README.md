@@ -24,9 +24,8 @@ Unit tests:
 
 ## Using it
 
-1. Start the relay somewhere the phone can reach (`make up` in the repo root).
-2. In the app, set **Relay address** to `ws://<that machine>:8080/ws` (use `wss://` behind TLS). The default, `ws://10.0.2.2:8080/ws`, is the development machine as seen from the Android emulator.
-3. Pick the voice language and how far you can see, then tap **Fog mode** and allow precise location.
+1. **Relay address** defaults to the public relay, `wss://foglink-relay.fly.dev/ws`, which works on mobile data. To use your own, start it (`make up` in the repo root) and enter `ws://<that machine>:8080/ws`; from the Android emulator the development machine is `ws://10.0.2.2:8080/ws`.
+2. Pick the voice language and how far you can see, then tap **Fog mode** and allow precise location.
 
 ### Testing indoors
 

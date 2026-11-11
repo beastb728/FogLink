@@ -2,9 +2,22 @@
 // Reconnects by itself and keeps an estimate of the relay's clock so that
 // event-to-alert delay can be measured across two phones.
 
+/** Wire protocol version this client speaks. See server/relay.go. */
+export const PROTOCOL = 1;
+const CLOSE_UPGRADE = 4426;
+
 export class RelayLink {
-  constructor(url = defaultUrl()) {
-    this.url = url;
+  /**
+   * world 'sim' is for the simulator and for phones showing a pretend position.
+   * The relay keeps it apart from phones reporting where they really are.
+   */
+  constructor(url = defaultUrl(), { world = 'real' } = {}) {
+    this.world = world;
+    this.outdated = false; // the relay no longer accepts this client's protocol version
+    const u = new URL(url, typeof location !== 'undefined' ? location.href : undefined);
+    u.searchParams.set('p', PROTOCOL);
+    if (world === 'sim') u.searchParams.set('world', 'sim');
+    this.url = u.toString();
     this.handlers = {};
     this.open = false;
     this.offset = 0; // relay clock minus local clock, ms
@@ -37,11 +50,12 @@ export class RelayLink {
       this._ping();
       this._timer = setInterval(() => this._ping(), 5000);
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       this.open = false;
       clearInterval(this._timer);
+      if (e && e.code === CLOSE_UPGRADE) this.outdated = true;
       this._emit('close');
-      setTimeout(() => this._connect(), 1500);
+      setTimeout(() => this._connect(), this.outdated ? 60000 : 1500);
     };
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {
@@ -61,6 +75,9 @@ export class RelayLink {
           this.offset = m.rts - (m.ts + now) / 2;
         }
         this._emit('pong', rtt);
+      } else if (m.t === 'hello') {
+        this.outdated = m.min > PROTOCOL;
+        this._emit('hello', m);
       } else this._emit(m.t, m);
     };
   }

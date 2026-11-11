@@ -15,6 +15,7 @@ object FogState {
     @Volatile var rttMs = -1L
     @Volatile var sensor = "–"
     @Volatile var delayText = "–"
+    @Volatile var cover = "" // Cover.* once Fog mode is on, "" before the first check
     @Volatile var alertLevel = 0
     @Volatile var alertText = ""
     @Volatile var alertAt = 0L
@@ -49,6 +50,13 @@ class Prefs(ctx: Context) {
     var relayUrl: String
         get() = p.getString("relay", BuildConfig.DEFAULT_RELAY)!!
         set(v) = p.edit().putString("relay", v).apply()
+
+    /** Developer mode: shows the relay address, the demo position and the drive logger. */
+    var dev: Boolean
+        get() = p.getBoolean("dev", false)
+        set(v) = p.edit().putBoolean("dev", v).apply()
+    /** The demo position only applies while developer mode is on. */
+    val demoActive: Boolean get() = dev && demo
 
     // Desk testing: a pretend position on a road instead of GPS
     var demo: Boolean

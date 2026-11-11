@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { assess, phrase, AlertGate, LEVEL, stoppableSpeed } from '../src/core/alert.js';
+import { assess, phrase, AlertGate, LEVEL, stoppableSpeed, CoverGate, coverState, coverPhrase, COVER } from '../src/core/alert.js';
 import { Sim, runAB } from '../src/core/sim.js';
 import { loadRoads, matchCarriageway } from '../src/core/road.js';
 import { BrakeDetector } from '../src/phone/detector.js';
@@ -146,4 +146,34 @@ test('detector: learns forward from GPS, fires on hard braking, ignores a speed 
   }
   assert.equal(events.length, n);
   assert.equal(det.aligned, false, 'alignment is relearned after the phone moves');
+});
+
+test('cover status: says why it cannot warn, once the state has held', () => {
+  assert.equal(coverState({ outdated: false, relayOpen: true, gpsFresh: true, onRoad: true }), COVER.OK);
+  assert.equal(coverState({ outdated: false, relayOpen: false, gpsFresh: true, onRoad: true }), COVER.RELAY);
+  assert.equal(coverState({ outdated: false, relayOpen: true, gpsFresh: false, onRoad: false }), COVER.GPS);
+  assert.equal(coverState({ outdated: false, relayOpen: true, gpsFresh: true, onRoad: false }), COVER.ROAD);
+  assert.equal(coverState({ outdated: true, relayOpen: false, gpsFresh: false, onRoad: false }), COVER.UPDATE);
+  assert.match(coverPhrase(COVER.RELAY), /offline/i);
+  assert.match(coverPhrase(COVER.RELAY, 'hi'), /चेतावनी/);
+  const g = new CoverGate();
+  assert.equal(g.offer(COVER.OK, 0), false); // not yet held
+  assert.equal(g.offer(COVER.OK, 8000), true);
+  assert.equal(g.offer(COVER.OK, 20000), false); // said already
+  assert.equal(g.offer(COVER.RELAY, 21000), false);
+  assert.equal(g.offer(COVER.OK, 23000), false); // a 2 s drop-out is never spoken
+  assert.equal(g.offer(COVER.RELAY, 40000), false);
+  assert.equal(g.offer(COVER.RELAY, 48000), true);
+});
+
+test('toll plazas are marked on every carriageway', () => {
+  const roads = loadRoads(['nh48', 'yamuna'].map((n) => JSON.parse(readFileSync(new URL(`../../data/roads/${n}.json`, import.meta.url)))));
+  for (const cw of roads) {
+    assert.ok(cw.tolls.length >= 3, `${cw.id} has toll plazas`);
+    const [a, b] = cw.tolls[0];
+    assert.ok(cw.inTollZone(a - 500) && cw.inTollZone((a + b) / 2) && cw.inTollZone(b + 200));
+    assert.ok(!cw.inTollZone(a - 700) || cw.tolls.length > 1);
+    const zone = cw.tolls.reduce((sum, [x, y]) => sum + (y - x) + 900, 0);
+    assert.ok(zone / cw.length < 0.06, `${cw.id}: toll zones cover ${(100 * zone / cw.length).toFixed(1)}% of the road`);
+  }
 });

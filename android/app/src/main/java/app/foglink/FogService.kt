@@ -34,6 +34,8 @@ import app.foglink.core.AlertGate
 import app.foglink.core.BrakeDetector
 import app.foglink.core.BrakeEvent
 import app.foglink.core.Carriageway
+import app.foglink.core.Cover
+import app.foglink.core.CoverGate
 import app.foglink.core.matchCarriageway
 import org.json.JSONObject
 import java.io.BufferedWriter
@@ -62,6 +64,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
 
     private val detector = BrakeDetector()
     private val gate = AlertGate()
+    private var cover = CoverGate()
     private var id = RelayLink.randomId()
     private var idAt = 0L
     private var cw: Carriageway? = null
@@ -137,7 +140,9 @@ class FogService : Service(), SensorEventListener, LocationListener {
         fogOn = true
         FogState.on = true
         detector.reset()
-        demo = prefs.demo
+        demo = prefs.demoActive
+        cover = CoverGate()
+        FogState.cover = ""
         if (demo) {
             cw = roads.firstOrNull { it.id == prefs.demoCw }
             s = (prefs.demoKm * 1000.0).coerceIn(0.0, cw?.length ?: 0.0)
@@ -146,7 +151,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
             FogState.say("Demo position: not using GPS")
         } else speed = 0.0
         startSensing()
-        link = RelayLink(prefs.relayUrl, { m -> handler.post { onAlert(m) } }, { publish() })
+        link = RelayLink(prefs.relayUrl, demo, { m -> handler.post { onAlert(m) } }, { publish() })
         tone = try { ToneGenerator(AudioManager.STREAM_ALARM, 100) } catch (e: RuntimeException) { null }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -169,6 +174,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
         tone?.release()
         tone = null
         cw = null
+        FogState.cover = ""
         publish()
         stopSensingIfIdle()
     }
@@ -257,9 +263,21 @@ class FogService : Service(), SensorEventListener, LocationListener {
             if (fogOn && road != null && l != null) {
                 l.send(JSONObject().put("t", "pos").put("id", id).put("cw", road.id).put("s", round1(s)).put("v", round1(speed)).put("ts", l.now()))
             }
+            if (fogOn) checkCover(now)
             publish()
             handler.postDelayed(this, 1000)
         }
+    }
+
+    /** Speak up whenever the phone stops, or starts, being able to warn its driver. */
+    private fun checkCover(now: Long) {
+        val l = link
+        val state = Cover.state(outdated = l?.outdated == true, relayOpen = l?.open == true, gpsFresh = now - fixAt <= 5000, onRoad = cw != null)
+        FogState.cover = state
+        if (!cover.offer(state, now)) return
+        speak(Cover.phrase(state, prefs.lang), flush = false)
+        if (state != Cover.OK) tone?.startTone(ToneGenerator.TONE_PROP_NACK, 300)
+        FogState.say(if (state == Cover.OK) "Warnings on" else "NO WARNINGS: ${Cover.phrase(state, "en")}")
     }
 
     private fun round1(x: Double) = (x * 10).roundToInt() / 10.0
@@ -267,6 +285,8 @@ class FogService : Service(), SensorEventListener, LocationListener {
     private fun sendStop(ev: BrakeEvent) {
         val road = cw ?: return
         val l = link ?: return
+        // crawling at a toll plaza is not news; hard braking there still is
+        if ((ev.kind == "slow" || ev.kind == "stopped") && road.inTollZone(s)) return
         l.send(JSONObject().put("t", "stop").put("id", id).put("cw", road.id).put("s", round1(s)).put("v", round1(speed)).put("dec", round1(ev.dec)).put("kind", ev.kind).put("ts", l.now()))
         if (ev.kind == "brake") FogState.say("Hard braking reported (%.2f g, %s)".format(Locale.US, ev.dec / Alert.G, ev.source))
     }
@@ -360,7 +380,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
         return Notification.Builder(this, CHANNEL)
             .setContentTitle("FogLink is on")
             .setContentText("Listening for vehicles braking ahead")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setSmallIcon(R.drawable.ic_stat_fog)
             .setContentIntent(open)
             .setOngoing(true)
             .build()

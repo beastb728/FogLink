@@ -34,12 +34,14 @@ ROADS = [
         "name": "Yamuna Expressway",
         "ends": ("Greater Noida", "Agra"),  # (north/west end, south/east end)
         "query": 'way["highway"~"^(motorway|trunk)$"]["name"~"Yamuna Expressway",i](27.0,77.3,28.6,78.3);',
+        "bbox": "27.0,77.3,28.6,78.3",
     },
     {
         "id": "nh48",
         "name": "NH-48 Delhi-Jaipur",
         "ends": ("Delhi", "Jaipur"),
         "query": 'way["highway"~"^(motorway|trunk)$"]["ref"~"(^|;) ?NH ?48(;|$)"](26.85,75.75,28.62,77.25);',
+        "bbox": "26.85,75.75,28.62,77.25",
     },
 ]
 
@@ -198,9 +200,81 @@ def simplify(line, tol=4.0):
     return [p for p, k_ in zip(line, keep) if k_]
 
 
+def overpass(q, raw, refresh):
+    if raw.exists() and not refresh:
+        return json.loads(raw.read_text())
+    last = None
+    for url in OVERPASS:
+        try:
+            req = urllib.request.Request(
+                url,
+                data=urllib.parse.urlencode({"data": q}).encode(),
+                headers={"User-Agent": "foglink-osm-fetch/0.1", "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=240) as r:
+                body = r.read()
+            data = json.loads(body)
+            if "elements" in data:
+                RAW.mkdir(exist_ok=True)
+                raw.write_bytes(body)
+                return data
+            last = "no result"
+        except Exception as e:  # try the next mirror
+            last = e
+            print(f"  {url}: {e}", file=sys.stderr)
+    raise SystemExit(f"overpass failed: {last}")
+
+
+def project(line, cum, pt):
+    """(distance along the line, distance from it) of pt's nearest point, in metres."""
+    best = (0.0, float("inf"))
+    kx = math.cos(math.radians(pt[0])) * 111320.0
+    for i in range(len(line) - 1):
+        ax, ay = (line[i][1] - pt[1]) * kx, (line[i][0] - pt[0]) * 110540.0
+        bx, by = (line[i + 1][1] - pt[1]) * kx, (line[i + 1][0] - pt[0]) * 110540.0
+        dx, dy = bx - ax, by - ay
+        den = dx * dx + dy * dy
+        f = 0.0 if den == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / den))
+        d = math.hypot(ax + f * dx, ay + f * dy)
+        if d < best[1]:
+            best = (cum[i] + f * (cum[i + 1] - cum[i]), d)
+    return best
+
+
+def add_tolls(refresh=False, max_off=120.0, join=600.0):
+    """Mark where each carriageway passes through a toll plaza: "tolls": [[from_m, to_m], ...].
+
+    Phones do not report crawling or queueing inside these stretches (plus a
+    margin they add themselves); everyone slows down there and expects to.
+    Booths on entry and exit ramps sit well off the main line and are ignored.
+    """
+    for road in ROADS:
+        path = OUT / f"{road['id']}.json"
+        doc = json.loads(path.read_text())
+        q = f'[out:json][timeout:120];(node["barrier"="toll_booth"]({road["bbox"]});node["highway"="toll_gantry"]({road["bbox"]}););out;'
+        nodes = [(e["lat"], e["lon"]) for e in overpass(q, RAW / f"{road['id']}-tolls.json", refresh)["elements"] if e.get("type") == "node"]
+        for cw in doc["carriageways"]:
+            line = cw["line"]
+            cum = [0.0]
+            for p_, q_ in zip(line, line[1:]):
+                cum.append(cum[-1] + hav(p_, q_))
+            hits = sorted(s_ for s_, d in (project(line, cum, n) for n in nodes) if d <= max_off)
+            spans = []
+            for s_ in hits:
+                if spans and s_ - spans[-1][1] <= join:
+                    spans[-1][1] = s_
+                else:
+                    spans.append([s_, s_])
+            cw["tolls"] = [[round(a_), round(b_)] for a_, b_ in spans]
+            print(f"  {cw['id']}: {len(spans)} toll plazas at km " + ", ".join(f"{(a_ + b_) / 2000:.1f}" for a_, b_ in spans))
+        path.write_text(json.dumps(doc, separators=(",", ":")))
+
+
 def main():
     refresh = "--refresh" in sys.argv
     OUT.mkdir(exist_ok=True)
+    if "--tolls-only" in sys.argv:
+        return add_tolls(refresh)
     for road in ROADS:
         print(f"{road['name']}:")
         data = fetch(road, refresh)
@@ -232,6 +306,7 @@ def main():
             "attribution": "(c) OpenStreetMap contributors, ODbL",
             "carriageways": cws,
         }, separators=(",", ":")))
+    add_tolls(refresh)
 
 
 if __name__ == "__main__":

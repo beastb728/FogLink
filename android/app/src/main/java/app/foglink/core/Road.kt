@@ -16,7 +16,14 @@ import kotlin.math.sqrt
  * One direction of one road, as a line that runs the way traffic drives.
  * Position "s" is metres from the start of the line. Port of sim/src/core/road.js.
  */
-class Carriageway(val id: String, val towards: String, val roadName: String, private val line: Array<DoubleArray>) {
+class Carriageway(
+    val id: String,
+    val towards: String,
+    val roadName: String,
+    private val line: Array<DoubleArray>,
+    /** [from, to] metres along, where the line passes a toll plaza. */
+    val tolls: List<DoubleArray> = emptyList(),
+) {
     private val cum = DoubleArray(line.size)
     val length: Double
 
@@ -24,6 +31,14 @@ class Carriageway(val id: String, val towards: String, val roadName: String, pri
         for (i in 1 until line.size) cum[i] = cum[i - 1] + haversine(line[i - 1], line[i])
         length = cum[line.size - 1]
     }
+
+    /**
+     * Inside a toll plaza or its approach, where everyone crawls and expects to.
+     * Phones do not report "slow" or "stopped" here; hard braking is still reported.
+     * The queue forms before the booths, so the margin is longer on that side.
+     */
+    fun inTollZone(s: Double, before: Double = 600.0, after: Double = 300.0): Boolean =
+        tolls.any { s >= it[0] - before && s <= it[1] + after }
 
     private fun seg(s: Double): Int {
         var lo = 0
@@ -100,9 +115,11 @@ class Carriageway(val id: String, val towards: String, val roadName: String, pri
             return List(cws.length()) { i ->
                 val c = cws.getJSONObject(i)
                 val pts = c.getJSONArray("line")
+                val tolls = c.optJSONArray("tolls")
                 Carriageway(
                     c.getString("id"), c.getString("towards"), road.getString("name"),
                     Array(pts.length()) { j -> pts.getJSONArray(j).let { doubleArrayOf(it.getDouble(0), it.getDouble(1)) } },
+                    List(tolls?.length() ?: 0) { j -> tolls!!.getJSONArray(j).let { doubleArrayOf(it.getDouble(0), it.getDouble(1)) } },
                 )
             }
         }

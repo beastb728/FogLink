@@ -82,6 +82,45 @@ class VectorsTest {
     }
 
     @Test
+    fun coverStatusMatchesReference() {
+        val states = vectors.getJSONArray("coverStates")
+        assertEquals(16, states.length())
+        for (i in 0 until states.length()) {
+            val c = states.getJSONArray(i)
+            assertEquals("state for $c", c.getString(4), Cover.state(c.getBoolean(0), c.getBoolean(1), c.getBoolean(2), c.getBoolean(3)))
+        }
+        val phrases = vectors.getJSONArray("coverPhrases")
+        assertEquals(5, phrases.length())
+        for (i in 0 until phrases.length()) {
+            val p = phrases.getJSONArray(i)
+            assertEquals(p.getString(1), Cover.phrase(p.getString(0), "en"))
+            assertEquals(p.getString(2), Cover.phrase(p.getString(0), "hi"))
+        }
+        val steps = vectors.getJSONArray("coverGate")
+        val gate = CoverGate()
+        var spoken = 0
+        for (i in 0 until steps.length()) {
+            val s = steps.getJSONArray(i)
+            assertEquals("step $i $s", s.getBoolean(2), gate.offer(s.getString(0), s.getLong(1)))
+            if (s.getBoolean(2)) spoken++
+        }
+        assertTrue(spoken > 3)
+    }
+
+    @Test
+    fun tollZonesMatchReference() {
+        val roads = listOf("nh48", "yamuna").flatMap { Carriageway.parse(File("../../data/roads/$it.json").readText()) }.associateBy { it.id }
+        val cases = vectors.getJSONArray("toll")
+        var inside = 0
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONArray(i)
+            assertEquals("toll zone for $c", c.getBoolean(2), roads.getValue(c.getString(0)).inTollZone(c.getDouble(1)))
+            if (c.getBoolean(2)) inside++
+        }
+        assertTrue(inside > 20 && inside < cases.length())
+    }
+
+    @Test
     fun roadFilesParse() {
         val nh48 = Carriageway.parse(File("../../data/roads/nh48.json").readText())
         val jaipur = nh48.first { it.id == "nh48:jaipur" }

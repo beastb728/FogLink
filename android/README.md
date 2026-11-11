@@ -9,12 +9,26 @@ Needs JDK 17 and the Android SDK (platform 34, build-tools 34). Point
 `local.properties` at the SDK (`sdk.dir=/path/to/Android/Sdk`), then:
 
 ```bash
-./gradlew assembleDebug
+./gradlew assembleRelease
 ```
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
+
+There are two builds, and they install side by side:
+
+| | Release (`app.foglink`, "FogLink") | Debug (`app.foglink.debug`, "FogLink (debug)") |
+|---|---|---|
+| Relay address | `wss://` only | `ws://` allowed, for a relay on the local network |
+| Code | shrunk with R8 (about 220 KB) | not shrunk |
+| Signed with | the release key | the SDK's debug key |
+
+**The release key.** `keystore.properties` and `keystore/` (both git-ignored) hold
+the key that signs release builds. Android only accepts an update signed with the
+same key as the installed app, so losing it means every user must uninstall and
+reinstall. Keep a copy of both somewhere safe, outside this folder. Without them
+`assembleRelease` still builds, unsigned.
 
 Unit tests:
 
@@ -24,16 +38,28 @@ Unit tests:
 
 ## Using it
 
-1. **Relay address** defaults to the public relay, `wss://foglink-relay.fly.dev/ws`, which works on mobile data. To use your own, start it (`make up` in the repo root) and enter `ws://<that machine>:8080/ws`; from the Android emulator the development machine is `ws://10.0.2.2:8080/ws`.
-2. Pick the voice language and how far you can see, then tap **Fog mode** and allow precise location.
+Pick the voice language and how far you can see, then tap **Fog mode** and allow
+precise location. The app uses the public relay, `wss://foglink-relay.fly.dev/ws`.
+The first status line, **Warnings**, says whether the app can warn right now; when
+that changes it also says so aloud ("FogLink offline. No network…").
+
+### Developer mode
+
+Tap the **FogLink** title seven times (with Fog mode off) to show the testing
+controls: the demo position, the relay address and the drive logger. To use your
+own relay, start it (`make up` in the repo root) and enter `ws://<that machine>:8080/ws`
+in the debug build; from the Android emulator the development machine is
+`ws://10.0.2.2:8080/ws`.
 
 ### Testing indoors
 
 Away from the two corridors the app reports "not on a FogLink road" and the relay
-sends it nothing. Under **Position** choose **Demo (desk test)**, pick a road, a
+sends it nothing. In developer mode, under **Position** choose **Demo (desk test)**, pick a road, a
 starting kilometre and a speed, then switch Fog mode on. The app then pretends to
 drive along that road: GPS and the braking sensor are ignored, everything else
-(service, relay link, alert rule, voice, tone, vibration) is the real thing. To
+(service, relay link, alert rule, voice, tone, vibration) is the real thing. A demo
+position joins the relay's simulated world, so it hears the dashboard's virtual
+vehicles and can never alert, or be alerted by, a phone in a real car. To
 hear an alert, start the dashboard simulation, press **Stop a vehicle**, and start
 the demo about 0.8 km before the kilometre shown in the dashboard's phone link.
 **Pretend I just braked hard** sends a real stop event from the demo position.
@@ -66,6 +92,5 @@ Road lines are not duplicated: the build copies `data/roads/*.json` into the APK
 - **TFLite model.** The app runs the threshold detector only. `ml/` has not exported a `.tflite` file (needs `ai-edge-torch`); once it has, the model takes `[1, 4, 200]`: forward, lateral, vertical m/s² and gyro magnitude rad/s, newest sample last.
 - **Battery.** A partial wake lock and 100 Hz sensors run for as long as Fog mode is on. Drain has not been measured, and nothing has been done yet to reduce it.
 - **Battery-optimisation guides** for Xiaomi, Samsung and others: some phones will still kill the service.
-- **Cleartext traffic** is allowed so a test phone can reach a relay on the local network over `ws://`. Switch it off in `AndroidManifest.xml` before distributing.
-- **Release build.** Debug-signed only; no app icon beyond a system placeholder.
+- **Play Store.** Not submitted: it needs a privacy policy page and the background-location declaration.
 - **Direct phone-to-phone radio** (Bluetooth long-range / Wi-Fi Aware): v2.

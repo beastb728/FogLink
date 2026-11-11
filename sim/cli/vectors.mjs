@@ -2,7 +2,7 @@
 // Writes test vectors from the JavaScript reference logic, so the Kotlin port in
 // android/ can be checked against it:  node sim/cli/vectors.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { assess, phrase, AlertGate } from '../src/core/alert.js';
+import { assess, phrase, AlertGate, CoverGate, coverState, coverPhrase, COVER } from '../src/core/alert.js';
 import { loadRoads, matchCarriageway } from '../src/core/road.js';
 import { BrakeDetector } from '../src/phone/detector.js';
 import { rng } from '../src/core/sim.js';
@@ -79,5 +79,34 @@ drive(12, 1.5); drive(10, 0); drive(0.6, 0, 9); drive(5, -1.5); drive(4, 1.5); d
 drive(1, 0, 0, 4); // phone picked up: alignment is dropped
 drive(6, 1.2); drive(8, 1.0); drive(3, -6); drive(6, -1.5); drive(6, 0);
 
-writeFileSync(new URL('vectors.json', out), JSON.stringify({ alert, gate, match, detector: { stream, fired } }));
+// 5. cover status: which state [outdated, relayOpen, gpsFresh, onRoad, state], its phrases, and when the gate speaks
+const coverStates = [];
+for (let i = 0; i < 16; i++) {
+  const c = { outdated: !!(i & 8), relayOpen: !!(i & 4), gpsFresh: !!(i & 2), onRoad: !!(i & 1) };
+  coverStates.push([c.outdated, c.relayOpen, c.gpsFresh, c.onRoad, coverState(c)]);
+}
+const coverPhrases = Object.values(COVER).map((st) => [st, coverPhrase(st, 'en'), coverPhrase(st, 'hi')]);
+const coverGate = [];
+const cg = new CoverGate();
+const all = Object.values(COVER);
+let cs = all[0];
+t = 0;
+for (let i = 0; i < 300; i++) {
+  t += 1000;
+  if (r() < 0.12) cs = all[Math.floor(r() * all.length)];
+  coverGate.push([cs, t, cg.offer(cs, t)]);
+}
+
+// 6. toll zones: [carriageway, s, inside]
+const toll = [];
+for (const cw of roads) {
+  for (const [a, b] of cw.tolls) for (const s of [a - 601, a - 599, a, (a + b) / 2, b + 299, b + 301]) toll.push([cw.id, s, cw.inTollZone(s)]);
+  for (let i = 0; i < 20; i++) {
+    const s = r() * cw.length;
+    toll.push([cw.id, s, cw.inTollZone(s)]);
+  }
+}
+
+writeFileSync(new URL('vectors.json', out), JSON.stringify({ alert, gate, match, detector: { stream, fired }, coverStates, coverPhrases, coverGate, toll }));
+console.log(`cover gate ${coverGate.length} (${coverGate.filter((c) => c[2]).length} spoken), toll ${toll.length} (${toll.filter((c) => c[2]).length} inside)`);
 console.log(`alert ${alert.length}, gate ${gate.length}, match ${match.length}, detector ${stream.length} samples / ${fired.length} events (${fired.map((e) => e[1] + ':' + e[2]).join(' ')})`);

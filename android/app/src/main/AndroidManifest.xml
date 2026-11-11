@@ -13,14 +13,14 @@
     <uses-feature android:name="android.hardware.location.gps" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" />
 
-    <!-- usesCleartextTraffic lets a test phone reach a relay on the local network over
-         ws://. Turn it off, and use wss://, for anything beyond testing. -->
+    <!-- Unencrypted ws:// is allowed in debug builds only, so a test phone can reach a
+         relay on the local network. Release builds accept wss:// alone. -->
     <application
         android:allowBackup="false"
-        android:label="FogLink"
-        android:icon="@android:drawable/ic_dialog_alert"
+        android:label="${appLabel}"
+        android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="${cleartext}">
 
         <activity
             android:name=".MainActivity"

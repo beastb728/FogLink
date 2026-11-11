@@ -40,7 +40,7 @@ make dev
 
 1. Open the dashboard. Pick a fog level, press **Start**, then **Stop a vehicle** (or click anywhere on either traffic strip).
 2. The top strip is the same traffic without FogLink; the bottom strip has it. Yellow sweeping backward is a stop event reaching the vehicles behind.
-3. Press **Open a phone 800 m back**. On that page tap **Fog mode**. It is now a real client of the real relay, placed behind the incident, and it speaks when the virtual cars ahead of it brake. Its **Pretend I just braked hard** button sends a real stop event that virtual cars react to.
+3. Press **Open a phone 800 m back**. On that page tap **Fog mode**. It is now a real client of the real relay, placed behind the incident with a pretend position, and it speaks when the virtual cars ahead of it brake. Its **Pretend I just braked hard** button sends a real stop event that virtual cars react to.
 4. **Run 10 seeds × 3 fog levels** repeats the scenario and tabulates the result with its assumptions.
 
 ### A phone in a real car
@@ -73,9 +73,10 @@ fly deploy --ha=false
 ```
 
 Phones then use `wss://<app>.fly.dev/ws` (Android app) or
-`https://<app>.fly.dev/phone.html` (browser). The dashboard's live view of real
-phones stays off unless you set a token: `fly secrets set FOGLINK_OBSERVER_TOKEN=<your own>`
-and open the dashboard with `?token=<the same>`.
+`https://<app>.fly.dev/phone.html` (browser). The dashboard always shows phones
+that joined with a demo position. Its view of phones reporting real positions
+stays off unless you set a token: `fly secrets set FOGLINK_OBSERVER_TOKEN=<your own>`
+and open the dashboard with `?token=<the same>`; that view is read-only.
 
 A deployment is running at https://foglink-relay.fly.dev (Singapore; Mumbai was
 not offered). Checked from one home broadband connection in India: 10 of 10 test
@@ -107,6 +108,29 @@ Wire format (JSON over one WebSocket at `/ws`):
 | phone → relay, on an event | `{"t":"stop","id","cw","s","v","dec","kind","ts"}` with kind `brake`, `stopped`, `slow` or `crash` |
 | relay → phones behind | `{"t":"alert", …the stop event…, "gap","rts"}` |
 | clock sync | `{"t":"ping","ts"}` → `{"t":"pong","ts","rts"}` |
+| relay → phone, once on connecting | `{"t":"hello","p","min","world"}` |
+
+**Simulated and real traffic never mix.** A client that connects to `/ws?world=sim`
+is in the relay's simulated world: the dashboard's virtual vehicles, and phones
+showing a demo position. Everything else is the real world. The relay shares
+nothing between the two, so pressing "Stop a vehicle" on a public dashboard can
+never make a phone in a real car speak. The web phone client and the Android app
+pick the world themselves: demo position → simulated, GPS → real.
+
+**Fake events.** In the real world the relay forwards a stop event only if it fits
+what the same connection has been reporting: at least three position reports over
+2.5 s that agree with each other (distance covered matches the speed claimed, no
+jumps), road speed within the last 90 s, and an event at the place and speed last
+reported. Anything else is dropped and counted in `/stats` as `rejected`. There
+are also limits of 4 stop events and 5 position reports a second per connection
+and 256 connections per address. This stops one-off fake events and ties each
+connection to one place on the road. It does not stop someone who fakes a
+believable drive first: there are no accounts, so there is nothing to ban.
+
+**Versions.** Clients connect with `?p=1` and the relay says which versions it
+accepts in `hello`. Within a version, changes are additive only; both sides ignore
+fields and message types they do not know. If a client is older than `min`, the
+relay closes it with code 4426 and the app tells the driver, aloud, to update.
 
 ### Alert levels
 
@@ -119,6 +143,11 @@ thicker fog).
 | Heads-up | under 1 m/s² | "Slow traffic ahead." / "आगे ट्रैफ़िक धीमा है।" |
 | Warning | 1 to 3 m/s² | "Vehicle stopped 300 metres ahead." / "300 मीटर आगे गाड़ी रुकी है।" |
 | Critical | over 3 m/s² | "BRAKE" / "ब्रेक!", red full-screen flash, vibration |
+
+Silence must not be mistaken for "all clear", so the phone also says when it
+cannot warn and why: no network, no GPS signal, a road FogLink does not cover, or
+an app too old for the relay. It speaks once the state has held for 8 seconds,
+and says "FogLink active" when warnings are back.
 
 ## Metrics against the six targets
 
@@ -180,7 +209,7 @@ to nothing. Change the driver-response assumptions and the result changes.
 - No accounts, names or phone numbers.
 - Vehicle IDs are random and replaced every 10 minutes.
 - The relay keeps a position for 5 seconds and an event only for as long as it takes to forward it. Nothing is logged or stored.
-- The dashboard's view of real phones is a live feed that is off unless the relay is started with an observer token (`FOGLINK_OBSERVER_TOKEN`); `make up` and `make dev` set it to `dev` for demos.
+- Nobody can watch phones that report real positions unless the relay is started with an observer token (`FOGLINK_OBSERVER_TOKEN`) and they know it; that feed is read-only. `make up` and `make dev` set the token to `dev` for local use. Demo positions are not real, and the dashboard shows them without a token.
 - Drive recordings stay on the phone until the user saves the file. `data/drives/` is git-ignored.
 
 ## Repo layout
@@ -203,10 +232,11 @@ make test
 ```
 
 Relay: routing (only vehicles behind, same carriageway, within 2 km), ID
-rotation, position expiry, observer token, fan-out latency; run against both
+rotation, position expiry, observer token, simulated and real worlds kept apart,
+implausible stop events refused, protocol version and connection cap, fan-out latency; run against both
 stores when `FOGLINK_TEST_REDIS` is set. Simulator: alert levels and phrases, no
 spontaneous collisions, deterministic A/B arms, map matching by heading, the
-braking detector against a tilted phone, a speed breaker and a phone pick-up.
+"cannot warn" announcements, toll zones, the braking detector against a tilted phone, a speed breaker and a phone pick-up.
 Android (`cd android && ./gradlew testDebugUnitTest`): the Kotlin port replays
 vectors generated from the JavaScript and must match exactly.
 
@@ -214,6 +244,7 @@ vectors generated from the JavaScript and must match exactly.
 
 - **Road lines.** The Yamuna Expressway has a 5.6 km stretch near Agra that OpenStreetMap tags under another name; it is bridged with a straight segment, so distances there are slightly short. The Yamuna lines measure 178 km because the tagged road runs past the 165 km expressway proper.
 - **Phones.** Tested indoors on one phone with a pretend position only: nothing has been tested in a moving vehicle. Over mobile data the Android app has received and spoken alerts through the public relay, from a demo position, with the phone stationary. Hindi speech depends on the phone having a Hindi voice installed.
-- **Slow-traffic events** fire below 30 km/h within a minute of expressway speed, so toll plazas will trigger heads-ups today.
+- **Toll plazas.** Phones do not report crawling or stopping from 600 m before a toll plaza to 300 m after it (hard braking is still reported), so a queue that reaches further back than that still triggers heads-ups, and a stopped vehicle inside the zone is reported only if someone brakes hard for it. Plaza positions come from OpenStreetMap toll booths within 120 m of the line; a few near the Greater Noida end of the Yamuna Expressway are probably ramp booths, not main-line plazas. Not checked on the road.
+- **Fake events** are made harder, not impossible; see "Fake events" above.
 - **ML numbers are synthetic.** Train on logged drives with `make ml DRIVES="data/drives/*.csv"`.
 - **Relay** is single-instance. Redis shares positions between instances but alerts are only pushed to phones connected to the instance that received the event.

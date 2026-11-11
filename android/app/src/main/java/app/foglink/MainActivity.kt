@@ -24,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import app.foglink.core.Alert
+import app.foglink.core.Cover
 
 /**
  * One screen. The driver taps Fog mode once before setting off and never touches
@@ -38,6 +39,8 @@ class MainActivity : Activity() {
     private lateinit var overlay: TextView
     private lateinit var relay: EditText
     private lateinit var demoBox: LinearLayout
+    private lateinit var devBox: LinearLayout
+    private var titleTaps = 0
     private lateinit var demoKm: EditText
     private lateinit var demoKmh: EditText
     private lateinit var testBrake: Button
@@ -103,7 +106,16 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(32))
         }
-        col.addView(TextView(this).apply { this.text = "FogLink"; setTextColor(ink); textSize = 22f; typeface = Typeface.DEFAULT_BOLD })
+        col.addView(TextView(this).apply {
+            this.text = "FogLink"; setTextColor(ink); textSize = 22f; typeface = Typeface.DEFAULT_BOLD
+            setOnClickListener {
+                if (++titleTaps < 7) return@setOnClickListener
+                titleTaps = 0
+                if (FogState.on) return@setOnClickListener FogState.say("Switch Fog mode off to change developer mode")
+                prefs.dev = !prefs.dev
+                FogState.say(if (prefs.dev) "Developer mode on" else "Developer mode off")
+            }
+        })
         col.addView(TextView(this).apply {
             this.text = "Warns you by voice when a vehicle ahead in fog brakes hard or stops. An aid only: it cannot see every hazard and does not replace your own eyes and brakes."
             setTextColor(muted); textSize = 13f; setPadding(0, dp(2), 0, dp(14))
@@ -121,8 +133,10 @@ class MainActivity : Activity() {
         col.addView(label("How far can you see?"))
         col.addView(segment(listOf("200" to "200 m", "50" to "50 m", "20" to "20 m"), { prefs.visibility.toString() }) { prefs.visibility = it.toInt() })
 
-        col.addView(label("Position"))
-        col.addView(segment(listOf("gps" to "Phone GPS", "demo" to "Demo (desk test)"), { if (prefs.demo) "demo" else "gps" }) {
+        // Everything below is for testing, hidden until the title is tapped seven times.
+        devBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        devBox.addView(label("Position"))
+        devBox.addView(segment(listOf("gps" to "Phone GPS", "demo" to "Demo (desk test)"), { if (prefs.demo) "demo" else "gps" }) {
             prefs.demo = it == "demo"
             render()
         })
@@ -160,9 +174,9 @@ class MainActivity : Activity() {
             setOnClickListener { if (FogState.on) send(FogService.ACTION_TEST_BRAKE) }
         }
         demoBox.addView(testBrake, LinearLayout.LayoutParams(MATCH_PARENT, dp(52)).apply { topMargin = dp(8) })
-        col.addView(demoBox)
+        devBox.addView(demoBox)
 
-        col.addView(label("Relay address"))
+        devBox.addView(label("Relay address"))
         relay = EditText(this).apply {
             setText(prefs.relayUrl)
             setTextColor(ink); textSize = 14f
@@ -170,21 +184,26 @@ class MainActivity : Activity() {
             background = box(panel, line); setPadding(dp(12), dp(10), dp(12), dp(10))
             setOnFocusChangeListener { _, has -> if (!has) prefs.relayUrl = this.text.toString().trim() }
         }
-        col.addView(relay)
+        devBox.addView(relay)
 
-        col.addView(label("Drive logger"))
+        devBox.addView(label("Drive logger"))
         rec = Button(this).apply {
             isAllCaps = false
             setTextColor(ink)
             background = box(panel, line)
             setOnClickListener { if (FogState.recording) send(FogService.ACTION_REC_OFF) else withPermissions(FogService.ACTION_REC_ON) }
         }
-        col.addView(rec, LinearLayout.LayoutParams(MATCH_PARENT, dp(52)))
+        devBox.addView(rec, LinearLayout.LayoutParams(MATCH_PARENT, dp(52)))
+        col.addView(devBox)
         log = TextView(this).apply { setTextColor(muted); textSize = 12f; setPadding(0, dp(10), 0, 0); setLineSpacing(dp(3).toFloat(), 1f) }
         col.addView(log)
         col.addView(TextView(this).apply {
-            this.text = "No account, no name, no phone number. While Fog mode is on, the phone sends its road, distance along it and speed under a random ID that changes every 10 minutes. The relay forgets it within seconds. Recordings stay on this phone."
+            this.text = "No account, no name, no phone number. While Fog mode is on, the phone sends its road, distance along it and speed under a random ID that changes every 10 minutes. The relay forgets it within seconds."
             setTextColor(muted); textSize = 12f; setPadding(0, dp(20), 0, 0)
+        })
+        col.addView(TextView(this).apply {
+            this.text = "FogLink ${BuildConfig.VERSION_NAME}"
+            setTextColor(muted); textSize = 11f; setPadding(0, dp(12), 0, 0)
         })
 
         overlay = TextView(this).apply { gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD; visibility = View.GONE; setPadding(dp(24), 0, dp(24), 0) }
@@ -243,12 +262,22 @@ class MainActivity : Activity() {
         fog.setTextColor(ink)
         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         relay.isEnabled = !on
+        devBox.visibility = if (prefs.dev) View.VISIBLE else View.GONE
         demoBox.visibility = if (prefs.demo) View.VISIBLE else View.GONE
         demoKm.isEnabled = !on
         demoKmh.isEnabled = !on
         testBrake.alpha = if (on) 1f else 0.4f
         val road = FogState.road
+        val warnings = when (FogState.cover) {
+            "" -> if (on) "checking…" else "off"
+            Cover.OK -> "ON"
+            Cover.RELAY -> "OFF: no network"
+            Cover.GPS -> "OFF: no GPS signal"
+            Cover.ROAD -> "OFF: this road is not covered"
+            else -> "OFF: update the app"
+        }
         status.text = listOf(
+            "Warnings: $warnings",
             "Speed: " + (if (FogState.speedKmh >= 0) "${FogState.speedKmh} km/h" else "–"),
             "Road: " + (road?.let { "$it, km %.1f".format(FogState.km) } ?: if (on) "not on a FogLink road" else "–"),
             "Relay: " + (if (FogState.relayOpen) (if (FogState.rttMs >= 0) "${FogState.rttMs} ms" else "online") else "offline"),

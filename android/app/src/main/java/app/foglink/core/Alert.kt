@@ -105,3 +105,52 @@ class AlertGate(private val repeatMs: Long = 8000, private val quietMs: Long = 2
         return false
     }
 }
+
+/**
+ * Whether the phone can currently warn its driver, and if not, why. Silence must
+ * never be mistaken for "all clear", so every change of state is spoken.
+ */
+object Cover {
+    const val OK = "ok"
+    const val RELAY = "relay"
+    const val GPS = "gps"
+    const val ROAD = "road"
+    const val UPDATE = "update"
+
+    private val phrases = mapOf(
+        OK to ("FogLink active." to "फ़ॉगलिंक चालू है।"),
+        RELAY to ("FogLink offline. No network. You will not get warnings." to "फ़ॉगलिंक बंद है। नेटवर्क नहीं है। चेतावनी नहीं मिलेगी।"),
+        GPS to ("FogLink offline. No GPS signal. You will not get warnings." to "फ़ॉगलिंक बंद है। जीपीएस सिग्नल नहीं है। चेतावनी नहीं मिलेगी।"),
+        ROAD to ("This road is not covered by FogLink." to "यह सड़क फ़ॉगलिंक में शामिल नहीं है।"),
+        UPDATE to ("FogLink needs an update. You will not get warnings." to "फ़ॉगलिंक को अपडेट करना ज़रूरी है। चेतावनी नहीं मिलेगी।"),
+    )
+
+    fun phrase(state: String, lang: String): String = phrases.getValue(state).let { if (lang == "hi") it.second else it.first }
+
+    /** What stands between the phone and a warning, most fundamental first. */
+    fun state(outdated: Boolean, relayOpen: Boolean, gpsFresh: Boolean, onRoad: Boolean): String = when {
+        outdated -> UPDATE
+        !relayOpen -> RELAY
+        !gpsFresh -> GPS
+        onRoad -> OK
+        else -> ROAD
+    }
+}
+
+/** Announces a cover state once it has held for a few seconds, so a flicker is not spoken. */
+class CoverGate(private val holdMs: Long = 8000) {
+    private var said: String? = null
+    private var pending: String? = null
+    private var since = 0L
+
+    /** @return whether to announce [state] now */
+    fun offer(state: String, nowMs: Long): Boolean {
+        if (state != pending) {
+            pending = state
+            since = nowMs
+        }
+        if (state == said || nowMs - since < holdMs) return false
+        said = state
+        return true
+    }
+}

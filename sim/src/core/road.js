@@ -23,8 +23,9 @@ export function bearing(a, b) {
 export const angleDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
 export class Carriageway {
-  constructor({ id, towards, line }, roadName = '') {
+  constructor({ id, towards, line, tolls = [] }, roadName = '') {
     this.id = id;
+    this.tolls = tolls; // [[from, to], ...] metres along, where the line passes a toll plaza
     this.towards = towards;
     this.roadName = roadName;
     this.line = line;
@@ -43,6 +44,15 @@ export class Carriageway {
       else hi = mid;
     }
     return lo;
+  }
+
+  /**
+   * Inside a toll plaza or its approach, where everyone crawls and expects to.
+   * Phones do not report "slow" or "stopped" here; hard braking is still reported.
+   * The queue forms before the booths, so the margin is longer on that side.
+   */
+  inTollZone(s, before = 600, after = 300) {
+    return this.tolls.some(([a, b]) => s >= a - before && s <= b + after);
   }
 
   /** [lat, lon] at s metres along, optionally shifted `offset` metres to the right. */

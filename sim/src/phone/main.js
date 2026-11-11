@@ -4,7 +4,7 @@
 import yamuna from '../../../data/roads/yamuna.json';
 import nh48 from '../../../data/roads/nh48.json';
 import { loadRoads, matchCarriageway } from '../core/road.js';
-import { assess, phrase, AlertGate, LEVEL } from '../core/alert.js';
+import { assess, phrase, AlertGate, LEVEL, CoverGate, coverState, coverPhrase, COVER } from '../core/alert.js';
 import { RelayLink, randomId } from '../core/link.js';
 import { BrakeDetector } from './detector.js';
 
@@ -22,6 +22,7 @@ const st = {
 };
 const detector = new BrakeDetector();
 const gate = new AlertGate();
+let cover = new CoverGate();
 let link = null;
 let audio = null;
 
@@ -55,8 +56,8 @@ function paint() {
   $('fog').firstChild.textContent = st.on ? 'Fog mode is ON' : 'Fog mode is off';
   $('fog').querySelector('small').textContent = st.on ? 'Listening for vehicles ahead. Tap to switch off.' : 'Tap once before you set off. Then leave the phone alone.';
   $('speed').textContent = st.on ? Math.round(st.speed * 3.6) : '–';
-  $('link').textContent = link && link.open ? (link.rtt != null ? `${Math.round(link.rtt)} ms` : 'online') : 'offline';
-  $('road').textContent = st.cw ? `${st.cw.roadName} → ${st.cw.towards}` : st.on ? 'Not on a FogLink road' : '–';
+  $('link').textContent = link && link.outdated ? 'update needed' : link && link.open ? (link.rtt != null ? `${Math.round(link.rtt)} ms` : 'online') : 'offline';
+  $('road').textContent = st.cw ? `${st.cw.roadName} → ${st.cw.towards}${st.source === 'demo' ? ' (demo)' : ''}` : st.on ? 'Not on a FogLink road' : '–';
   $('roadSub').textContent = st.cw ? `km ${(st.s / 1000).toFixed(1)}` : 'road';
   $('sensor').textContent = !st.on ? '–' : detector.aligned ? 'motion + GPS' : 'GPS only';
   if (st.delays.length) {
@@ -103,6 +104,26 @@ function announce(res) {
   log(`${['', 'Heads-up', 'Warning', 'CRITICAL'][res.level]}: “${text}” (${Math.round(res.gap)} m ahead)`);
 }
 
+function say(text) {
+  if (!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = st.lang === 'hi' ? 'hi-IN' : 'en-IN';
+  speechSynthesis.speak(u);
+}
+
+/** Speak up whenever the phone stops, or starts, being able to warn its driver. */
+function checkCover() {
+  const state = coverState({
+    outdated: !!link && link.outdated,
+    relayOpen: !!link && link.open,
+    gpsFresh: st.source === 'demo' || Date.now() - st.fixAt <= 5000,
+    onRoad: !!st.cw,
+  });
+  if (!cover.offer(state, Date.now())) return;
+  say(coverPhrase(state, st.lang));
+  log(state === COVER.OK ? 'Warnings on' : `NO WARNINGS: ${coverPhrase(state, 'en')}`);
+}
+
 const lines = [];
 function log(text) {
   lines.unshift(`${new Date().toLocaleTimeString()}  ${text}`);
@@ -112,7 +133,11 @@ function log(text) {
 
 // ---------- relay ----------
 function connect() {
-  link = new RelayLink();
+  // a demo position joins the relay's simulated world; a real one never does
+  const world = st.source === 'demo' ? 'sim' : 'real';
+  if (link && link.world === world) return;
+  if (link) link.close();
+  link = new RelayLink(undefined, { world });
   link.on('open', paint).on('close', paint).on('pong', paint);
   link.on('alert', (m) => {
     if (!st.on || !st.cw || m.cw !== st.cw.id) return;
@@ -138,11 +163,14 @@ function report() {
   if (st.source === 'demo') demoFix();
   else if (Date.now() - st.fixAt > 5000) st.cw = null; // GPS went quiet
   if (st.cw && link) link.send({ t: 'pos', id: st.id, cw: st.cw.id, s: Math.round(st.s * 10) / 10, v: +st.speed.toFixed(1), ts: link.now() });
+  checkCover();
   paint();
 }
 
 function sendStop(ev) {
   if (!st.on || !st.cw || !link) return;
+  // crawling at a toll plaza is not news; hard braking there still is
+  if ((ev.kind === 'slow' || ev.kind === 'stopped') && st.cw.inTollZone(st.s)) return;
   link.send({ t: 'stop', id: st.id, cw: st.cw.id, s: Math.round(st.s * 10) / 10, v: +st.speed.toFixed(1), dec: +ev.dec.toFixed(1), kind: ev.kind, ts: link.now() });
   if (ev.kind === 'brake') log(`Hard braking reported (${(ev.dec / 9.81).toFixed(2)} g, ${ev.source})`);
 }
@@ -155,6 +183,7 @@ function demoFix() {
   st.speed = Math.max(0, +$('kmh').value / 3.6);
 }
 function startPosition() {
+  connect();
   if (watch != null) navigator.geolocation.clearWatch(watch);
   watch = null;
   if (st.source === 'demo') return demoFix();
@@ -208,9 +237,9 @@ async function motionPermission() {
 $('fog').addEventListener('click', async () => {
   st.on = !st.on;
   if (st.on) {
-    if (!link) connect();
     await motionPermission();
     detector.reset();
+    cover = new CoverGate();
     startPosition();
     try {
       st.wake = await navigator.wakeLock?.request('screen');

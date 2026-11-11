@@ -103,29 +103,41 @@ function inject(s) {
 
 // ---------- live relay: real phones join the simulation ----------
 const relayChip = $('relay');
-const token = new URLSearchParams(location.search).get('token') || 'dev';
-const link = new RelayLink();
+// The dashboard lives in the relay's simulated world: its virtual events reach
+// phones showing a demo position and can never reach a phone reporting a real one.
+const link = new RelayLink(undefined, { world: 'sim' });
 const chip = () => {
   const n = [...phones.values()].filter((p) => Date.now() - p.t < 5000).length;
   relayChip.className = 'chip ' + (link.open ? 'on' : 'off');
-  relayChip.textContent = link.open ? `Relay connected · ${n} real phone${n === 1 ? '' : 's'}` : 'Relay offline (simulation only)';
+  relayChip.textContent = link.open ? `Relay connected · ${n} phone${n === 1 ? '' : 's'} joined` : 'Relay offline (simulation only)';
 };
 link.on('open', () => {
-  link.send({ t: 'observe', token });
+  link.send({ t: 'observe' });
   chip();
 });
 link.on('close', chip);
-link.on('pos', (m) => {
+const onPhonePos = (m) => {
   if (m.cw === state.cw.id) phones.set(m.id, { s: m.s - state.s0, v: m.v, t: Date.now() });
   chip();
-});
-link.on('stop', (m) => {
-  // a real phone braked: virtual cars behind it hear about it too
+};
+const onPhoneStop = (m) => {
+  // a phone braked: virtual cars behind it hear about it too
   if (m.id.startsWith('sim-') || m.cw !== state.cw.id || !state.fog) return;
   const ev = { t: state.fog.t, s: m.s - state.s0, v: m.v, dec: m.dec || 0, lane: 0, kind: m.kind, from: -1, real: true };
   state.fog.recentEvents.push(ev);
   state.fog.deliver(ev);
-});
+};
+link.on('pos', onPhonePos);
+link.on('stop', onPhoneStop);
+// With ?token=<the relay's observer token>, also watch phones reporting real
+// positions. That feed is read-only: nothing the dashboard does reaches them.
+const token = new URLSearchParams(location.search).get('token');
+if (token) {
+  const real = new RelayLink();
+  real.on('open', () => real.send({ t: 'observe', token }));
+  real.on('pos', onPhonePos);
+  real.on('stop', onPhoneStop);
+}
 function bridgeOut(ev) {
   // virtual stop events go through the real relay, so a phone in a real car hears them
   link.send({ t: 'stop', id: 'sim-' + ev.from, cw: state.cw.id, s: Math.round((state.s0 + ev.s) * 10) / 10, v: +ev.v.toFixed(1), dec: +ev.dec.toFixed(1), kind: ev.kind, ts: link.now() });

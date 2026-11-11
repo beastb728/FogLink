@@ -18,7 +18,14 @@ import kotlin.math.roundToLong
  * of the relay's clock, so event-to-alert delay can be measured across two phones.
  * Wire format: see server/relay.go.
  */
-class RelayLink(private val url: String, private val onAlert: (JSONObject) -> Unit, private val onState: () -> Unit) {
+class RelayLink(url: String, sim: Boolean, private val onAlert: (JSONObject) -> Unit, private val onState: () -> Unit) {
+    // sim: a pretend position joins the relay's simulated world, which the relay
+    // keeps apart from phones reporting where they really are.
+    private val url = url + (if ('?' in url) "&" else "?") + "p=$PROTOCOL" + (if (sim) "&world=sim" else "")
+
+    /** The relay no longer accepts this app's protocol version: the driver must update. */
+    @Volatile var outdated = false
+        private set
     private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build()
     private val timer = Executors.newSingleThreadScheduledExecutor()
     private var ws: WebSocket? = null
@@ -64,7 +71,16 @@ class RelayLink(private val url: String, private val onAlert: (JSONObject) -> Un
                         onState()
                     }
                     "alert" -> onAlert(m)
+                    "hello" -> {
+                        outdated = m.optInt("min", 1) > PROTOCOL
+                        onState()
+                    }
                 }
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                if (code == CLOSE_UPGRADE) outdated = true
+                webSocket.close(1000, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = retry()
@@ -76,7 +92,7 @@ class RelayLink(private val url: String, private val onAlert: (JSONObject) -> Un
         open = false
         pinger?.cancel(false)
         onState()
-        if (!closed) timer.schedule({ connect() }, 1500, TimeUnit.MILLISECONDS)
+        if (!closed) timer.schedule({ connect() }, if (outdated) 60_000L else 1500L, TimeUnit.MILLISECONDS)
     }
 
     fun send(m: JSONObject): Boolean = open && ws?.send(m.toString()) == true
@@ -90,6 +106,10 @@ class RelayLink(private val url: String, private val onAlert: (JSONObject) -> Un
     }
 
     companion object {
+        /** Wire protocol version this app speaks. See server/relay.go. */
+        const val PROTOCOL = 1
+        private const val CLOSE_UPGRADE = 4426
+
         /** Random anonymous vehicle ID; the caller replaces it every 10 minutes. */
         fun randomId(): String = ByteArray(8).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
     }

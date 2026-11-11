@@ -2,3 +2,5 @@ local.properties
 .gradle/
 build/
 app/build/
+keystore/
+keystore.properties

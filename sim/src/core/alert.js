@@ -97,6 +97,52 @@ export class AlertGate {
   }
 }
 
+/**
+ * Whether the phone can currently warn its driver, and if not, why. Silence must
+ * never be mistaken for "all clear", so every change of state is spoken.
+ */
+export const COVER = { OK: 'ok', RELAY: 'relay', GPS: 'gps', ROAD: 'road', UPDATE: 'update' };
+
+const COVER_PHRASES = {
+  ok: ['FogLink active.', 'फ़ॉगलिंक चालू है।'],
+  relay: ['FogLink offline. No network. You will not get warnings.', 'फ़ॉगलिंक बंद है। नेटवर्क नहीं है। चेतावनी नहीं मिलेगी।'],
+  gps: ['FogLink offline. No GPS signal. You will not get warnings.', 'फ़ॉगलिंक बंद है। जीपीएस सिग्नल नहीं है। चेतावनी नहीं मिलेगी।'],
+  road: ['This road is not covered by FogLink.', 'यह सड़क फ़ॉगलिंक में शामिल नहीं है।'],
+  update: ['FogLink needs an update. You will not get warnings.', 'फ़ॉगलिंक को अपडेट करना ज़रूरी है। चेतावनी नहीं मिलेगी।'],
+};
+
+export function coverPhrase(state, lang = 'en') {
+  return COVER_PHRASES[state][lang === 'hi' ? 1 : 0];
+}
+
+/** What stands between the phone and a warning, most fundamental first. */
+export function coverState({ outdated, relayOpen, gpsFresh, onRoad }) {
+  if (outdated) return COVER.UPDATE;
+  if (!relayOpen) return COVER.RELAY;
+  if (!gpsFresh) return COVER.GPS;
+  return onRoad ? COVER.OK : COVER.ROAD;
+}
+
+/** Announces a cover state once it has held for a few seconds, so a flicker is not spoken. */
+export class CoverGate {
+  constructor({ holdMs = 8000 } = {}) {
+    this.holdMs = holdMs;
+    this.said = null;
+    this.pending = null;
+    this.since = 0;
+  }
+  /** @returns {boolean} whether to announce `state` now */
+  offer(state, nowMs) {
+    if (state !== this.pending) {
+      this.pending = state;
+      this.since = nowMs;
+    }
+    if (state === this.said || nowMs - this.since < this.holdMs) return false;
+    this.said = state;
+    return true;
+  }
+}
+
 /** Speed (m/s) from which a driver can stop within `dist` metres. */
 export function stoppableSpeed(dist, reactionS, decel) {
   // v*tr + v^2/(2b) = dist

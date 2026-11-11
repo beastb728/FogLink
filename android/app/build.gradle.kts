@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,6 +12,13 @@ val syncRoads = tasks.register<Copy>("syncRoads") {
     into(roadAssets.map { it.dir("roads") })
 }
 
+// Release signing: android/keystore.properties (git-ignored) names the keystore.
+// Without it, `assembleRelease` still builds, unsigned.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "app.foglink"
     compileSdk = 34
@@ -18,12 +27,34 @@ android {
         applicationId = "app.foglink"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.4.0"
         // The public relay. For a relay on the development machine use ws://10.0.2.2:8080/ws
         // from the emulator, or ws://<its LAN address>:8080/ws from a phone on the same Wi-Fi.
         // On a real phone, type the relay's address on the main screen.
         buildConfigField("String", "DEFAULT_RELAY", "\"wss://foglink-relay.fly.dev/ws\"")
+    }
+    signingConfigs {
+        if (keystoreProps.containsKey("storeFile")) create("release") {
+            storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug" // installs beside the release build
+            manifestPlaceholders["cleartext"] = "true"
+            manifestPlaceholders["appLabel"] = "FogLink (debug)"
+        }
+        release {
+            manifestPlaceholders["cleartext"] = "false"
+            manifestPlaceholders["appLabel"] = "FogLink"
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.findByName("release")
+        }
     }
     buildFeatures { buildConfig = true }
     sourceSets["main"].assets.srcDir(roadAssets)

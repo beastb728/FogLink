@@ -213,7 +213,7 @@ vectors generated from the JavaScript and must match exactly.
 ## Known gaps
 
 - **Road lines.** The Yamuna Expressway has a 5.6 km stretch near Agra that OpenStreetMap tags under another name; it is bridged with a straight segment, so distances there are slightly short. The Yamuna lines measure 178 km because the tagged road runs past the 165 km expressway proper.
-- **Phones.** Tested indoors on one phone with a pretend position only: nothing has been tested in a moving vehicle or over mobile data. Hindi speech depends on the phone having a Hindi voice installed.
+- **Phones.** Tested indoors on one phone with a pretend position only: nothing has been tested in a moving vehicle. Over mobile data the Android app has received and spoken alerts through the public relay, from a demo position, with the phone stationary. Hindi speech depends on the phone having a Hindi voice installed.
 - **Slow-traffic events** fire below 30 km/h within a minute of expressway speed, so toll plazas will trigger heads-ups today.
 - **ML numbers are synthetic.** Train on logged drives with `make ml DRIVES="data/drives/*.csv"`.
 - **Relay** is single-instance. Redis shares positions between instances but alerts are only pushed to phones connected to the instance that received the event.

@@ -248,3 +248,9 @@ vectors generated from the JavaScript and must match exactly.
 - **Fake events** are made harder, not impossible; see "Fake events" above.
 - **ML numbers are synthetic.** Train on logged drives with `make ml DRIVES="data/drives/*.csv"`.
 - **Relay** is single-instance. Redis shares positions between instances but alerts are only pushed to phones connected to the instance that received the event.
+
+## Licence
+
+Code: MIT, see [LICENSE](LICENSE). The road lines and toll plaza positions in
+`data/roads/` are derived from OpenStreetMap and stay under the ODbL
+(© OpenStreetMap contributors).

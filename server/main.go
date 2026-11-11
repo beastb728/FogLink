@@ -3,10 +3,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -42,8 +46,28 @@ func main() {
 	}
 	onOff := map[bool]string{true: "on", false: "off"}
 	log.Printf("FogLink relay on %s (protocol %d, real-position observer feed %s, plausibility checks %s)", *addr, ProtocolVersion, onOff[*token != ""], onOff[*strict])
+	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	go func() {
+		// On a deploy or restart: stop accepting, then tell every phone to reconnect.
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM, os.Interrupt)
+		<-sig
+		log.Print("shutting down: asking phones to reconnect")
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
+		go srv.Shutdown(ctx)
+		hub.Shutdown()
+		<-ctx.Done()
+		os.Exit(0)
+	}()
+	var err error
 	if *cert != "" {
-		log.Fatal(http.ListenAndServeTLS(*addr, *cert, *key, mux))
+		err = srv.ListenAndServeTLS(*cert, *key)
+	} else {
+		err = srv.ListenAndServe()
 	}
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	if err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+	select {} // the signal handler exits once phones have been told
 }

@@ -395,3 +395,25 @@ func TestProtocolVersionAndConnectionCap(t *testing.T) {
 		t.Fatal("outdated client was not closed")
 	}
 }
+
+// On shutdown every phone is told to reconnect, with the "service restart" close code.
+func TestShutdownTellsPhonesToReconnect(t *testing.T) {
+	hub := NewHub(newMemStore(), "")
+	srv := httptest.NewServer(hub)
+	defer srv.Close()
+	ws, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(srv.URL, "http")+"/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	if _, _, err := ws.Read(context.Background()); err != nil { // hello
+		t.Fatal(err)
+	}
+	go hub.Shutdown()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, _, err = ws.Read(ctx)
+	if websocket.CloseStatus(err) != websocket.StatusServiceRestart {
+		t.Fatalf("close status = %v (%v), want service restart", websocket.CloseStatus(err), err)
+	}
+}

@@ -1,178 +1,148 @@
+<div align="center">
+
 # FogLink
 
-Phones already in cars, turned into a fog-time collision warning network. When a
-vehicle brakes hard or stops on a foggy expressway, every phone behind it on the
-same carriageway, up to 2 km back, hears a voice alert.
+**A fog-time collision warning network built from the phones already in cars.**
 
-FogLink is an assistive warning. It cannot see every hazard and it does not
-prevent crashes; nothing here should be presented as doing so.
+When a vehicle brakes hard or stops on a foggy expressway, every phone behind it on
+the same carriageway, up to 2 km back, speaks a warning in Hindi or English.
 
-## What works today
+[![Tests](https://github.com/beastb728/FogLink/actions/workflows/ci.yml/badge.svg)](https://github.com/beastb728/FogLink/actions/workflows/ci.yml)
+[![Relay health](https://github.com/beastb728/FogLink/actions/workflows/relay-health.yml/badge.svg)](https://github.com/beastb728/FogLink/actions/workflows/relay-health.yml)
+[![Release](https://img.shields.io/github/v/release/beastb728/FogLink)](https://github.com/beastb728/FogLink/releases/latest)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-| Part | State |
+![Kotlin](https://img.shields.io/badge/Android-Kotlin-7F52FF?logo=kotlin&logoColor=white)
+![Go](https://img.shields.io/badge/Relay-Go-00ADD8?logo=go&logoColor=white)
+![JavaScript](https://img.shields.io/badge/Simulator-JavaScript-F7DF1E?logo=javascript&logoColor=black)
+![PyTorch](https://img.shields.io/badge/ML-PyTorch-EE4C2C?logo=pytorch&logoColor=white)
+![Redis](https://img.shields.io/badge/Store-Redis-DC382D?logo=redis&logoColor=white)
+
+### [▶ Live demo](https://foglink-relay.fly.dev) &nbsp;·&nbsp; [⬇ Download the Android app](https://github.com/beastb728/FogLink/releases/latest/download/FogLink.apk) &nbsp;·&nbsp; [How it works](#how-it-works)
+
+<img src="docs/demo.gif" alt="A blocked carriageway in 50 m fog: without FogLink the pileup grows; with it, the warning sweeps back through the traffic and vehicles slow before they arrive" width="860">
+
+<sub>Same traffic, same blockage, 50 m visibility. Top strip: no FogLink. Bottom strip: every vehicle running it. Yellow is the warning travelling back.</sub>
+
+</div>
+
+---
+
+## Why
+
+Every winter, fog on north Indian expressways causes chain collisions: a vehicle
+stops, and drivers behind see it only when it is too late to stop. The information
+that would help them, "something has stopped 600 m ahead of you", exists the moment
+the first driver brakes. FogLink carries it backward faster than the traffic arrives.
+
+It needs no roadside hardware and no new device: a phone on the dashboard is the
+sensor, the radio and the loudspeaker.
+
+> FogLink is an assistive warning. It cannot see every hazard and it does not
+> prevent crashes. It is never a reason to drive faster in fog.
+
+## Try it in 60 seconds
+
+1. Open the **[live dashboard](https://foglink-relay.fly.dev)**. It simulates 1,000 vehicles on the real NH-48 Delhi–Jaipur line.
+2. Press **Start**, then **Stop a vehicle**. Watch the two strips diverge.
+3. Press **Open a phone 800 m back** and tap **Fog mode** on the page that opens. That page is a real client of the real relay. Turn the sound on: it speaks as the virtual traffic ahead of it brakes.
+4. Press **Run 10 seeds × 3 fog levels** for averages over many traffic layouts.
+
+## The app
+
+<div align="center">
+<img src="docs/app.png" alt="The Android app: status screen with Fog mode on, a heads-up alert, and the full-screen BRAKE alert" width="860">
+</div>
+
+One screen and one button. The driver taps **Fog mode** before setting off and does
+not touch the phone again; everything after that is spoken.
+
+| | |
 |---|---|
-| Relay (`server/`, Go + WebSockets, Redis or in-memory lookups) | Built, tested, packaged as a 21 MB Docker image |
-| Simulator and live map dashboard (`sim/`) | Built and tested: up to 2,000 virtual vehicles on the real NH-48 and Yamuna Expressway lines, crash injection, with-vs-without A/B |
-| Phone client (`sim/phone.html`, web) | Built: Fog mode, map matching, braking detection, Hindi/English voice alerts at three levels, drive logger. Tested in demo mode in a desktop browser and on one phone (OnePlus 11R, Chrome, relay over Wi-Fi): spoken alerts work. Not yet tested in a car |
-| ML pipeline (`ml/`) | Built: orientation alignment, GPS auto-labels, threshold baseline, 1D-CNN. Trained and scored on synthetic drives only |
-| Road data (`data/`) | Both corridors, both carriageways, from OpenStreetMap |
-| Android app (`android/`, Kotlin) | Built: foreground service, sensors + GPS, threshold braking detector, relay link, Hindi/English voice alerts, drive logger. Logic verified against the JavaScript reference by unit tests. Smoke-tested in an emulator (launch, Fog mode, map matching, Warning and BRAKE alerts from relay events). On one real phone (OnePlus 11R, relay over Wi-Fi): install, foreground service, GPS, relay link and spoken alerts work, the alerts using the app's demo position. Braking detection from the motion sensors has not been tried in a moving car |
-| TFLite export | **Not run** (needs `ai-edge-torch`); TorchScript is exported, and the Android app uses the threshold detector |
-| Direct phone-to-phone radio | Not started (v2) |
+| **Three alert levels** | "Slow traffic ahead" → "Vehicle stopped 300 metres ahead" → **BRAKE**, chosen from the deceleration this driver would need to stop in time |
+| **Hindi and English** | Voice, tone and vibration; a red full-screen flash for BRAKE |
+| **Says when it cannot warn** | "FogLink offline. No network." Silence is never allowed to mean "all clear" |
+| **Works with the screen off** | Foreground service; comes back by itself if Android kills it |
+| **No account** | No name, no phone number, no login. A random ID that changes every 10 minutes |
+| **220 KB** | Release build, shrunk with R8 |
 
-## Run it
+**[Download the APK](https://github.com/beastb728/FogLink/releases/latest/download/FogLink.apk)** (Android 8+), or see [android/README.md](android/README.md) to build it.
 
-Needs Docker, Node 22 and Python 3.10+. Go runs inside Docker.
+## The simulator
 
-```bash
-make up
+<div align="center">
+<img src="docs/dashboard.png" alt="The dashboard: live map, with-and-without strips, controls for fog, traffic, drivers and FogLink adoption" width="860">
+</div>
+
+The dashboard answers the question a phone alone cannot: *what happens to a whole
+road?* It runs two copies of identical traffic, one with FogLink and one without,
+and lets you change the fog, the traffic mix, how drivers behave and what share of
+vehicles run the app. Every result is shown beside the assumptions that produced it.
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph ahead["Vehicle that brakes"]
+        A1["Motion sensors + GPS"] --> A2["Braking detector"]
+        A1 --> A3["Map matching<br/>carriageway + metres along"]
+    end
+    subgraph relay["Relay · Go"]
+        R1["Who is behind this point,<br/>same carriageway, within 2 km?"]
+    end
+    subgraph behind["Every phone behind"]
+        B1["Can I stop in time?<br/>speed, gap, fog"] --> B2["Voice alert<br/>3 levels · हिन्दी / English"]
+    end
+    A2 -- "stop event" --> R1
+    A3 -- "position, once a second" --> R1
+    R1 -- "alert + gap" --> B1
+    SIM["Simulator + dashboard<br/>1,000 virtual vehicles"] -. "separate simulated world" .-> R1
 ```
 
-Then open http://localhost:8080 for the dashboard. For development with live reload:
-
-```bash
-make dev
-```
-
-(dashboard on http://localhost:5173, relay on :8080).
-
-### The 60-second demo
-
-1. Open the dashboard. Pick a fog level, press **Start**, then **Stop a vehicle** (or click anywhere on either traffic strip).
-2. The top strip is the same traffic without FogLink; the bottom strip has it. Yellow sweeping backward is a stop event reaching the vehicles behind.
-3. Press **Open a phone 800 m back**. On that page tap **Fog mode**. It is now a real client of the real relay, placed behind the incident with a pretend position, and it speaks when the virtual cars ahead of it brake. Its **Pretend I just braked hard** button sends a real stop event that virtual cars react to.
-4. **Run 10 seeds × 3 fog levels** repeats the scenario and tabulates the result with its assumptions.
-
-### A phone in a real car
-
-Browsers only give GPS and motion sensors to pages served over HTTPS. Put the
-relay behind a TLS proxy or tunnel, or give it a certificate directly:
-
-```bash
-./server/foglink-relay -static sim/dist -cert cert.pem -key key.pem
-```
-
-Open `https://<host>:8080/phone.html`, choose **Phone GPS**, tap **Fog mode**.
-The page must stay open with the screen on. The Android app (`android/README.md`)
-has no such limit: it runs as a foreground service. Testing rules from the project overview apply: hard-braking
-tests only in empty lots at low speed, and on real roads the tester is a
-passenger.
-
-### A public relay (Fly.io)
-
-`fly.toml` runs the same Docker image in Mumbai behind Fly's HTTPS, as a single
-machine (the relay holds positions in memory, so it must not be scaled out).
-Needs the `fly` command and a Fly.io account.
-
-```bash
-fly launch --copy-config --no-deploy
-```
-
-```bash
-fly deploy --ha=false
-```
-
-Phones then use `wss://<app>.fly.dev/ws` (Android app) or
-`https://<app>.fly.dev/phone.html` (browser). The dashboard always shows phones
-that joined with a demo position. Its view of phones reporting real positions
-stays off unless you set a token: `fly secrets set FOGLINK_OBSERVER_TOKEN=<your own>`
-and open the dashboard with `?token=<the same>`; that view is read-only.
-
-A deployment is running at https://foglink-relay.fly.dev (Singapore; Mumbai was
-not offered). Checked from one home broadband connection in India: 10 of 10 test
-events reached a client 600 m behind, none reached the opposite carriageway, and
-event-to-alert took 318 to 381 ms (median 323 ms) across both network hops. That
-is inside the 500 ms target with little to spare, and mobile data on a highway
-will be slower; a relay in India would cut it.
-
-## How it fits together
-
-```
-phone that brakes ── stop event ──▶ relay ── alert ──▶ phones up to 2 km behind
- motion + GPS                       carriageway +         stopping-distance check
- map matching                       distance lookup       voice, 3 levels, hi/en
-                                        ▲
-                                        │ virtual events, real phones
-                                   simulator + dashboard
-```
-
-- A **carriageway** is one direction of one road, stored as a line that runs the way traffic drives. A position is metres along that line, so "behind" is simply "smaller number, same carriageway". Phones do the map matching; the relay never sees raw GPS.
-- The **relay** only routes. It holds one latest position per anonymous ID for 5 seconds, in memory (or Redis with a 5 s expiry), and writes nothing to disk.
-- **Phones decide** whether to speak. `sim/src/core/alert.js` is the single alert rule, used unchanged by the phone client and by the simulator's FogLink arm.
-
-Wire format (JSON over one WebSocket at `/ws`):
-
-| Direction | Message |
-|---|---|
-| phone → relay, every second | `{"t":"pos","id","cw","s","v","ts"}` |
-| phone → relay, on an event | `{"t":"stop","id","cw","s","v","dec","kind","ts"}` with kind `brake`, `stopped`, `slow` or `crash` |
-| relay → phones behind | `{"t":"alert", …the stop event…, "gap","rts"}` |
-| clock sync | `{"t":"ping","ts"}` → `{"t":"pong","ts","rts"}` |
-| relay → phone, once on connecting | `{"t":"hello","p","min","world"}` |
-
-**Simulated and real traffic never mix.** A client that connects to `/ws?world=sim`
-is in the relay's simulated world: the dashboard's virtual vehicles, and phones
-showing a demo position. Everything else is the real world. The relay shares
-nothing between the two, so pressing "Stop a vehicle" on a public dashboard can
-never make a phone in a real car speak. The web phone client and the Android app
-pick the world themselves: demo position → simulated, GPS → real.
-
-**Fake events.** In the real world the relay forwards a stop event only if it fits
-what the same connection has been reporting: at least three position reports over
-2.5 s that agree with each other (distance covered matches the speed claimed, no
-jumps), road speed within the last 90 s, and an event at the place and speed last
-reported. Anything else is dropped and counted in `/stats` as `rejected`. There
-are also limits of 4 stop events and 5 position reports a second per connection
-and 256 connections per address. This stops one-off fake events and ties each
-connection to one place on the road. It does not stop someone who fakes a
-believable drive first: there are no accounts, so there is nothing to ban.
-
-**Versions.** Clients connect with `?p=1` and the relay says which versions it
-accepts in `hello`. Within a version, changes are additive only; both sides ignore
-fields and message types they do not know. If a client is older than `min`, the
-relay closes it with code 4426 and the app tells the driver, aloud, to update.
+- **A carriageway is a line.** One direction of one road, stored in the direction traffic drives. A position is just metres along it, so "behind" means "smaller number, same carriageway". Phones do the map matching; the relay never sees raw GPS.
+- **The relay only routes.** It holds one latest position per anonymous ID for five seconds, in memory, and writes nothing to disk.
+- **Phones decide whether to speak.** One alert rule, [`sim/src/core/alert.js`](sim/src/core/alert.js), is shared by the web client, the simulator and (ported to Kotlin) the Android app.
 
 ### Alert levels
 
 The phone works out the deceleration its driver would need to stop short of the
-reported position, after a 1.5 s reaction and a fog margin (10 to 40 m, larger in
-thicker fog).
+reported position, after a 1.5 s reaction time and a fog margin of 10 to 40 m.
 
-| Level | Needed deceleration | Spoken |
+| Level | Deceleration needed | Spoken |
 |---|---|---|
 | Heads-up | under 1 m/s² | "Slow traffic ahead." / "आगे ट्रैफ़िक धीमा है।" |
 | Warning | 1 to 3 m/s² | "Vehicle stopped 300 metres ahead." / "300 मीटर आगे गाड़ी रुकी है।" |
-| Critical | over 3 m/s² | "BRAKE" / "ब्रेक!", red full-screen flash, vibration |
+| Critical | over 3 m/s² | "BRAKE" / "ब्रेक!" with a red full-screen flash and vibration |
 
-Silence must not be mistaken for "all clear", so the phone also says when it
-cannot warn and why: no network, no GPS signal, a road FogLink does not cover, or
-an app too old for the relay. It speaks once the state has held for 8 seconds,
-and says "FogLink active" when warnings are back.
+## Engineering highlights
 
-## Metrics against the six targets
+- **One rule, three runtimes, verified equal.** The alert rule, map matching, braking detector and status logic are written once in JavaScript and ported to Kotlin. A generator replays about 5,000 alert cases, 240 map-matching cases and a 65-second sensor stream through the reference, and the Android unit tests require the port to match exactly.
+- **Simulated and real traffic cannot mix.** The public dashboard and any phone showing a demo position live in a separate world inside the relay. A click on the demo can never make a phone in a real car speak.
+- **Fake events are refused.** With no accounts there is nobody to ban, so the relay checks the physics instead: a stop event is forwarded only if its sender has been reporting a consistent drive on that carriageway, at road speed, at that place.
+- **Private by construction.** The server never receives GPS coordinates, keeps no history, and cannot link one ten-minute ID to the next.
+- **Orientation-free braking detection.** The phone can lie any way up: gravity gives "down", and speed changes from GPS teach it which way is "forward". It fires on 0.35 g sustained for 200 ms, and ignores speed breakers and being picked up.
+- **Real roads.** Both carriageways of NH-48 Delhi–Jaipur (247 km) and the Yamuna Expressway (179 km), built from OpenStreetMap by a routing pass that follows one-way geometry, with toll plazas marked so that toll queues do not trigger alerts.
+- **A traffic model that crashes for the right reasons.** Intelligent Driver Model with limited sight distance, reaction delay and drivers who overdrive their visibility. With no incident it produces zero collisions at every fog level.
+- **Operations.** Graceful restarts that tell phones to reconnect, a protocol version handshake, CI on every push, and an end-to-end probe of the live relay every 15 minutes.
 
-None of the targets has been measured on a road yet. This is what has been
-measured, and on what.
+## Results
 
-| Metric | Target | Measured here | On what |
-|---|---|---|---|
-| Braking detection precision / recall | over 90% / over 95% | CNN 92.8% / 98.7%; threshold baseline 93.8% / 94.7% | Synthetic drives, 15 held out, 75 episodes, GPS-derived labels |
-| Earlier than GPS | over 300 ms | CNN 1,640 ms median (1,170 ms at the worst 10%); baseline 1,410 ms | Same synthetic drives. The synthetic GPS lags the vehicle by 0.5 to 1.1 s by construction, so this mostly measures that assumption |
-| Event to alert, 95% of alerts | under 500 ms | Relay fan-out to 1,000 phones: p95 14 ms in memory, 32 ms via Redis. Through the public relay in Singapore: median 323 ms, worst 381 ms of 10 | Fan-out: one machine, loopback, excluding the network. Public relay: both hops over one home broadband line in India, 10 events, not mobile data. The phone client shows the true end-to-end delay live once two phones are on the road |
-| False alarms per 100 km | under 1 | CNN 6.3, baseline 3.7 | Synthetic drives with speed breakers, potholes, toll stops and phone moves. **Misses the target** |
-| Battery drain per hour | under 5% | Not measured | Needs the Android app on real phones |
-| Pileup reduction in simulation | report as measured | Table below | Simulator, assumptions stated |
+| What | Result | Measured on |
+|---|---|---|
+| Relay fan-out to 1,000 phones | 14 ms at the 95th percentile (32 ms with Redis) | One machine, loopback |
+| Event to alert through the live relay | 323 ms median, 381 ms worst of 10 | Home broadband in India ↔ relay in Singapore, both hops |
+| Braking detection, 1D-CNN (8,241 parameters, 36 KB) | 92.8% precision, 98.7% recall | Synthetic drives, 75 held-out episodes |
+| Braking detection, threshold rule (shipped in the app) | 93.8% precision, 94.7% recall | Same |
+| False alarms | 3.7 per 100 km (threshold), 6.3 (CNN); target is under 1 | Synthetic drives with speed breakers, potholes and toll stops |
+| Android app | Alerts spoken over Wi-Fi and mobile data | OnePlus 11R, demo position, stationary |
 
-The model is 8,241 parameters (36 KB), well under the 1 MB budget. On synthetic
-data it does not clearly beat the threshold rule: it finds more braking events and
-fires about 230 ms sooner, but raises more false alarms. Real logged drives are
-needed before choosing between them.
+<details>
+<summary><b>Simulated pileups, with and without FogLink</b> (20 traffic layouts per row)</summary>
 
-## Simulated pileups, with and without FogLink
+<br>
 
-All lanes blocked 20 s into the run; 1,000 vehicles, 3 lanes, 10 vehicles per km
-per lane; mean of 20 random traffic layouts, 240 s each. "Vehicles involved" is
-every vehicle that hit or was hit.
+All lanes blocked 20 s into the run; 1,000 vehicles, 3 lanes, 10 vehicles per km per
+lane; 240 s each. "Vehicles involved" is every vehicle that hit or was hit.
 
 | Visibility | Vehicles running FogLink | Vehicles involved, without → with | Fewer | Mean impact speed km/h, without → with |
 |---|---|---|---|---|
@@ -186,71 +156,105 @@ every vehicle that hit or was hit.
 | 50 m | 100% | 121.9 → 11.2 | 91% | 59 → 32 |
 | 200 m | any | 0 → 0 | – | – |
 
-FogLink did worse than no FogLink in 0 of the 20 runs in every row. With no
-incident there are no collisions in either arm at any fog level.
+FogLink did worse than no FogLink in 0 of the 20 runs in every row. Reproduce with `make ab`.
 
-Reproduce with `make ab`.
+**These numbers describe the model, not the road.** The benefit is roughly
+proportional to adoption, and at 10% it is close to nothing, which is why a rollout
+would start with fleets. The assumptions:
 
-**These numbers are a property of the model below, not a forecast.** The benefit
-is roughly proportional to how many vehicles run FogLink, and at 10% it is close
-to nothing. Change the driver-response assumptions and the result changes.
+- **Car-following.** Intelligent Driver Model per lane, no lane changes. A driver knows nothing about the vehicle ahead until it is within sight, responds one reaction time (mean 1.5 s) later, and in thick fog closes up to keep tail-lights in view.
+- **Speed in fog.** Drivers pick a speed whose stopping distance is twice what they can see. At 200 m this never bites and nobody crashes.
+- **Braking.** Wet road: cars 6.5, buses 4.8, trucks 4.2 m/s².
+- **Detection.** A phone reports hard braking, a crash or crawling after 0.2 s, catching 95% of events.
+- **Relay.** Events reach every equipped vehicle up to 2 km behind after 0.3 s, with no coverage gaps.
+- **Driver response.** 90% of alerted drivers, one second after the alert, ease down to a speed they can stop from within what they can see.
+- **Not modelled.** Lane changes, swerving, secondary impacts, alert fatigue.
 
-- **Car-following.** Intelligent Driver Model per lane, no lane changes. A driver knows nothing about the vehicle ahead until it is inside the visibility distance, starts responding one reaction time (mean 1.5 s) after it comes into view, and picks up changes in its speed half a reaction time late. In thick fog drivers close up to keep the tail-lights ahead in view.
-- **Speed in fog.** Drivers overdrive their sight distance: each picks a speed whose stopping distance is 2× what they can see, capped at normal cruising speed. Each lane has settled to a common platoon speed, within 3%. At 200 m this cap never bites and nobody crashes, which is why that row is empty.
-- **Braking.** Wet-road maximum deceleration: cars 6.5, buses 4.8, trucks 4.2 m/s².
-- **Collision.** A vehicle that reaches the one ahead at more than 2 km/h closing speed crashes and stays stopped in lane.
-- **Detection.** An equipped phone reports hard braking (over 0.35 g), a crash, or crawling below 30 km/h after 0.2 s, catching 95% of events. False alarms are not simulated.
-- **Relay.** Events reach every equipped vehicle up to 2 km behind, in every lane, after 0.3 s. No coverage gaps.
-- **Driver response.** 90% of alerted drivers, 1.0 s after the alert, ease down so that by the reported position they are at a speed they can stop from within what they can see.
-- **Not modelled.** Lane changes and swerving, secondary impacts, fire, drivers who brake harder than needed on a heads-up, alert fatigue.
+</details>
+
+<details>
+<summary><b>Wire protocol</b></summary>
+
+<br>
+
+JSON over one WebSocket at `/ws?p=1` (add `&world=sim` for simulated traffic).
+
+| Direction | Message |
+|---|---|
+| phone → relay, every second | `{"t":"pos","id","cw","s","v","ts"}` |
+| phone → relay, on an event | `{"t":"stop","id","cw","s","v","dec","kind","ts"}`, kind `brake`, `stopped`, `slow` or `crash` |
+| relay → phones behind | `{"t":"alert", …the stop event…, "gap","rts"}` |
+| clock sync | `{"t":"ping","ts"}` → `{"t":"pong","ts","rts"}` |
+| relay → phone, on connecting | `{"t":"hello","p","min","world"}` |
+
+- **Versions.** Changes within a version are additive; both sides ignore what they do not know. A client older than `min` is closed with code 4426 and tells its driver to update.
+- **Plausibility.** A real-world stop event needs three consistent position reports over 2.5 s, road speed within the last 90 s, and a place and speed matching the last report. Refusals are counted at `/stats`.
+- **Limits.** 4 stop events and 5 position reports a second per connection; 256 connections per address.
+- **Restarts.** On shutdown the relay closes every connection with code 1012; clients reconnect within two seconds and their next position report rebuilds the state.
+
+</details>
+
+## Run it yourself
+
+Needs Docker, Node 22 and Python 3.10+. Go runs inside Docker.
+
+```bash
+make up        # relay + Redis + dashboard on http://localhost:8080
+make dev       # the same with live reload on http://localhost:5173
+make test      # relay and simulator tests
+make ab        # the with-vs-without table above
+make ml        # train and score the braking model
+make apk       # build the Android app
+```
+
+To host your own relay, [`fly.toml`](fly.toml) deploys the same Docker image to
+Fly.io behind HTTPS: `fly launch --copy-config --no-deploy`, then
+`fly deploy --ha=false`. To watch phones that report real positions on the
+dashboard, set `FOGLINK_OBSERVER_TOKEN` and open it with `?token=…`; that view is
+read-only and off by default.
+
+## What is in the repository
+
+```
+android/   Kotlin app: foreground service, sensors, voice alerts; core/ is the ported shared logic
+server/    Go relay: routing, in-memory and Redis stores, plausibility checks, health probe
+sim/       src/core       alert rule, road geometry, traffic simulator, relay link
+           src/dashboard  live map and with-vs-without strips
+           src/phone      web phone client and braking detector
+ml/        synthetic drives, orientation alignment, GPS auto-labels, 1D-CNN, evaluation
+data/      OpenStreetMap pipeline and the carriageway lines it produces
+```
+
+**Tests.** Relay: routing by carriageway and distance, ID rotation, expiry, world
+separation, refusal of implausible events, versioning, graceful shutdown, fan-out
+latency. Simulator: alert levels, no spontaneous collisions, deterministic A/B
+arms, map matching, toll zones, the detector against a tilted phone, a speed
+breaker and a pick-up. Android: the Kotlin port against the reference vectors.
 
 ## Privacy
 
 - No accounts, names or phone numbers.
-- Vehicle IDs are random and replaced every 10 minutes.
-- The relay keeps a position for 5 seconds and an event only for as long as it takes to forward it. Nothing is logged or stored.
-- Nobody can watch phones that report real positions unless the relay is started with an observer token (`FOGLINK_OBSERVER_TOKEN`) and they know it; that feed is read-only. `make up` and `make dev` set the token to `dev` for local use. Demo positions are not real, and the dashboard shows them without a token.
-- Drive recordings stay on the phone until the user saves the file. `data/drives/` is git-ignored.
+- IDs are random and replaced every 10 minutes.
+- The relay holds a position for 5 seconds and an event only while forwarding it. Nothing is logged or stored.
+- Nobody can watch real positions unless the relay operator sets an observer token; that view is read-only.
+- Drive recordings stay on the phone.
 
-## Repo layout
+## Scope and limitations
 
-```
-server/   Go relay: relay.go (routing), store.go / redis_store.go (who is behind whom), tests
-sim/      src/core   simulator, alert rule, road geometry, relay link (shared by everything)
-          src/dashboard   live map + A/B strips
-          src/phone       phone client + threshold braking detector
-          cli/ab.mjs      headless A/B batches
-ml/       foglink_ml: synth.py (synthetic drives, CSV loader), signal.py (alignment, labels, baseline), train.py
-data/     fetch_osm.py, roads/*.json (map data © OpenStreetMap contributors, ODbL)
-android/  Kotlin app: core/ (alert rule, map matching, detector, ported from sim/), FogService, MainActivity
-```
+FogLink 1.0 is a complete, working system: the app, the relay and the simulator
+run end to end, and the relay is live. What it has **not** had is a road trial, and
+the numbers above say exactly what each one was measured on.
 
-## Tests
-
-```bash
-make test
-```
-
-Relay: routing (only vehicles behind, same carriageway, within 2 km), ID
-rotation, position expiry, observer token, simulated and real worlds kept apart,
-implausible stop events refused, protocol version and connection cap, fan-out latency; run against both
-stores when `FOGLINK_TEST_REDIS` is set. Simulator: alert levels and phrases, no
-spontaneous collisions, deterministic A/B arms, map matching by heading, the
-"cannot warn" announcements, toll zones, the braking detector against a tilted phone, a speed breaker and a phone pick-up.
-Android (`cd android && ./gradlew testDebugUnitTest`): the Kotlin port replays
-vectors generated from the JavaScript and must match exactly.
-
-## Known gaps
-
-- **Road lines.** The Yamuna Expressway has a 5.6 km stretch near Agra that OpenStreetMap tags under another name; it is bridged with a straight segment, so distances there are slightly short. The Yamuna lines measure 178 km because the tagged road runs past the 165 km expressway proper.
-- **Phones.** Tested indoors on one phone with a pretend position only: nothing has been tested in a moving vehicle. Over mobile data the Android app has received and spoken alerts through the public relay, from a demo position, with the phone stationary. Hindi speech depends on the phone having a Hindi voice installed.
-- **Toll plazas.** Phones do not report crawling or stopping from 600 m before a toll plaza to 300 m after it (hard braking is still reported), so a queue that reaches further back than that still triggers heads-ups, and a stopped vehicle inside the zone is reported only if someone brakes hard for it. Plaza positions come from OpenStreetMap toll booths within 120 m of the line; a few near the Greater Noida end of the Yamuna Expressway are probably ramp booths, not main-line plazas. Not checked on the road.
-- **Fake events** are made harder, not impossible; see "Fake events" above.
-- **ML numbers are synthetic.** Train on logged drives with `make ml DRIVES="data/drives/*.csv"`.
-- **Relay** is single-instance. Redis shares positions between instances but alerts are only pushed to phones connected to the instance that received the event.
+- **Not road-tested.** The app has been exercised on an emulator and on one phone using its built-in demo position. Braking detection, map matching from live GPS, battery drain and audibility in a moving cabin are unmeasured.
+- **Braking model.** Trained and scored on synthetic drives only, and its false-alarm rate misses the target. The app ships the simpler threshold detector; the app's drive logger exists to collect real data for the model.
+- **Latency headroom.** The live relay is in Singapore. A relay in India would cut the delay.
+- **Toll plazas** come from OpenStreetMap and have not been checked on the road.
+- **Fake events** are made hard, not impossible: someone who fakes a believable drive first can still send one.
+- **One relay instance.** Redis can share positions between instances, but alerts reach only the phones connected to the instance that received the event.
+- **Coverage.** Two corridors. No direct phone-to-phone radio for stretches without signal.
 
 ## Licence
 
-Code: MIT, see [LICENSE](LICENSE). The road lines and toll plaza positions in
-`data/roads/` are derived from OpenStreetMap and stay under the ODbL
+Code: MIT, see [LICENSE](LICENSE). Road lines and toll plaza positions in
+`data/roads/` are derived from OpenStreetMap and remain under the ODbL
 (© OpenStreetMap contributors).

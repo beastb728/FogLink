@@ -1,0 +1,17 @@
+# Probes the public relay end to end every 15 minutes. A failed run emails the
+# repository owner (GitHub's default for scheduled workflows).
+name: Relay health
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node server/healthcheck.mjs https://foglink-relay.fly.dev

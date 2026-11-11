@@ -11,6 +11,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.net.Uri
+import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -40,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var relay: EditText
     private lateinit var demoBox: LinearLayout
     private lateinit var devBox: LinearLayout
+    private lateinit var battery: Button
     private var titleTaps = 0
     private lateinit var demoKm: EditText
     private lateinit var demoKmh: EditText
@@ -127,6 +131,22 @@ class MainActivity : Activity() {
         col.addView(fog, LinearLayout.LayoutParams(MATCH_PARENT, dp(110)))
         status = TextView(this).apply { setTextColor(ink); textSize = 15f; setLineSpacing(dp(4).toFloat(), 1f); background = box(panel, line); setPadding(dp(14), dp(12), dp(14), dp(12)) }
         col.addView(status, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) })
+
+        battery = Button(this).apply {
+            this.text = "Android may stop FogLink when the screen is off.\nTap to let it keep running."
+            isAllCaps = false; textSize = 13f
+            setTextColor(Color.parseColor("#ffc53d"))
+            background = box(Color.parseColor("#2a2210"), Color.parseColor("#7a5c12"))
+            setOnClickListener {
+                try {
+                    @Suppress("BatteryLife") // a safety warning that must keep running is the intended use of this exemption
+                    startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+                } catch (e: Exception) {
+                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            }
+        }
+        col.addView(battery, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(12) })
 
         col.addView(label("Voice"))
         col.addView(segment(listOf("en" to "English", "hi" to "हिन्दी"), { prefs.lang }) { prefs.lang = it })
@@ -262,6 +282,7 @@ class MainActivity : Activity() {
         fog.setTextColor(ink)
         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         relay.isEnabled = !on
+        battery.visibility = if (getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)) View.GONE else View.VISIBLE
         devBox.visibility = if (prefs.dev) View.VISIBLE else View.GONE
         demoBox.visibility = if (prefs.demo) View.VISIBLE else View.GONE
         demoKm.isEnabled = !on

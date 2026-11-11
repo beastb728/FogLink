@@ -55,7 +55,8 @@ export class RelayLink {
       clearInterval(this._timer);
       if (e && e.code === CLOSE_UPGRADE) this.outdated = true;
       this._emit('close');
-      setTimeout(() => this._connect(), this.outdated ? 60000 : 1500);
+      // a little randomness, so a relay restart is not met by every phone at the same instant
+      setTimeout(() => this._connect(), this.outdated ? 60000 : 500 + Math.random() * 1500);
     };
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {

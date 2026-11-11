@@ -95,8 +95,13 @@ class FogService : Service(), SensorEventListener, LocationListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_FOG_ON -> startFog()
-            ACTION_FOG_OFF -> stopFog()
+            // no intent: Android killed the service and is bringing it back
+            null -> if (prefs.fogWanted) {
+                startFog()
+                if (fogOn) FogState.say("Fog mode restored after Android stopped it")
+            }
+            ACTION_FOG_ON -> { prefs.fogWanted = true; startFog() }
+            ACTION_FOG_OFF -> { prefs.fogWanted = false; stopFog() }
             ACTION_REC_ON -> startRecording()
             ACTION_REC_OFF -> stopRecording()
             ACTION_TEST_BRAKE -> handler.post { if (fogOn && demo) sendStop(BrakeEvent("brake", 0.6 * Alert.G, "test")) }
@@ -108,10 +113,17 @@ class FogService : Service(), SensorEventListener, LocationListener {
     // ---------- lifecycle ----------
 
     @SuppressLint("MissingPermission", "WakelockTimeout") // the activity only starts us once location is granted
-    private fun startSensing() {
-        if (wake != null) return
+    private fun startSensing(): Boolean {
+        if (wake != null) return true
         val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
-        if (Build.VERSION.SDK_INT >= 29) startForeground(1, notification(), type) else startForeground(1, notification())
+        try {
+            if (Build.VERSION.SDK_INT >= 29) startForeground(1, notification(), type) else startForeground(1, notification())
+        } catch (e: RuntimeException) {
+            // Android would not let a restarted service use location from the background:
+            // do not pretend to be running, ask the driver to open the app
+            getSystemService(NotificationManager::class.java).notify(2, notification("FogLink has stopped", "Tap to switch Fog mode back on", ongoing = false))
+            return false
+        }
         wake = (getSystemService(Context.POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "foglink:fog").also { it.acquire() }
         // 100 Hz: the rate the model and the logger expect
         sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { sensors.registerListener(this, it, 10_000, handler) }
@@ -122,6 +134,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
             FogState.say("GPS unavailable: ${e.message}")
         }
         handler.post(tick)
+        return true
     }
 
     private fun stopSensingIfIdle() {
@@ -137,6 +150,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
 
     private fun startFog() {
         if (fogOn) return
+        if (!startSensing()) return
         fogOn = true
         FogState.on = true
         detector.reset()
@@ -150,7 +164,6 @@ class FogService : Service(), SensorEventListener, LocationListener {
             demoAt = SystemClock.elapsedRealtime()
             FogState.say("Demo position: not using GPS")
         } else speed = 0.0
-        startSensing()
         link = RelayLink(prefs.relayUrl, demo, { m -> handler.post { onAlert(m) } }, { publish() })
         tone = try { ToneGenerator(AudioManager.STREAM_ALARM, 100) } catch (e: RuntimeException) { null }
         tts = TextToSpeech(this) { status ->
@@ -341,7 +354,7 @@ class FogService : Service(), SensorEventListener, LocationListener {
         if (rec != null) return
         val dir = File(getExternalFilesDir(null), "drives").apply { mkdirs() }
         val file = File(dir, "foglink-drive-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(java.util.Date())}.csv")
-        startSensing()
+        if (!startSensing()) return
         handler.post {
             rec = file.bufferedWriter().also { it.write("t_ms,kind,ax,ay,az,gx,gy,gz,lat,lon,speed,bearing,acc\n") }
             recRows = 0
@@ -373,16 +386,17 @@ class FogService : Service(), SensorEventListener, LocationListener {
         FogState.changed()
     }
 
-    private fun notification(): Notification {
+    private fun notification(title: String = "FogLink is on", text: String = "Listening for vehicles braking ahead", ongoing: Boolean = true): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Fog mode", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
-            .setContentTitle("FogLink is on")
-            .setContentText("Listening for vehicles braking ahead")
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(!ongoing)
             .setSmallIcon(R.drawable.ic_stat_fog)
             .setContentIntent(open)
-            .setOngoing(true)
+            .setOngoing(ongoing)
             .build()
     }
 

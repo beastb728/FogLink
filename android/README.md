@@ -43,6 +43,14 @@ precise location. The app uses the public relay, `wss://foglink-relay.fly.dev/ws
 The first status line, **Warnings**, says whether the app can warn right now; when
 that changes it also says so aloud ("FogLink offline. No network…").
 
+### Keeping it running
+
+Fog mode is a foreground service, but many phones stop background apps anyway.
+
+- The app shows a yellow button until it is exempt from battery optimisation. Tap it and allow.
+- If Android does kill the service, it is restarted and Fog mode comes back by itself (checked on an emulator by killing the process). If Android refuses to let it use location from the background, a notification asks the driver to open the app.
+- Some makers add their own limits on top. On OnePlus, Xiaomi, Oppo, Vivo and Samsung phones also look in Settings → Battery (or Apps → FogLink → Battery) for "Allow background activity" or "Unrestricted" and "Auto-launch", and lock the app in the recent-apps screen. The exact names differ by phone and version; this has not been verified on each brand.
+
 ### Developer mode
 
 Tap the **FogLink** title seven times (with Fog mode off) to show the testing

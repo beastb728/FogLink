@@ -33,7 +33,10 @@ ROADS = [
         "id": "yamuna",
         "name": "Yamuna Expressway",
         "ends": ("Greater Noida", "Agra"),  # (north/west end, south/east end)
-        "query": 'way["highway"~"^(motorway|trunk)$"]["name"~"Yamuna Expressway",i](27.0,77.3,28.6,78.3);',
+        # the second clause picks up the stretch near Agra that OpenStreetMap has without a name
+        "query": 'way["highway"~"^(motorway|trunk)$"]["name"~"Yamuna Expressway",i](27.0,77.3,28.6,78.3);'
+                 'way["highway"="motorway"][!"name"](27.13,78.08,27.24,78.15);'
+                 'way["highway"="motorway"]["name"~"Agra Ring",i](27.13,78.08,27.24,78.15);',
         "bbox": "27.0,77.3,28.6,78.3",
     },
     {

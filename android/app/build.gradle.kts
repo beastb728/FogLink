@@ -27,8 +27,8 @@ android {
         applicationId = "app.foglink"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "1.0.0"
         // The public relay. For a relay on the development machine use ws://10.0.2.2:8080/ws
         // from the emulator, or ws://<its LAN address>:8080/ws from a phone on the same Wi-Fi.
         // On a real phone, type the relay's address on the main screen.

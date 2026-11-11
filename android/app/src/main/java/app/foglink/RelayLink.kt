@@ -92,7 +92,8 @@ class RelayLink(url: String, sim: Boolean, private val onAlert: (JSONObject) -> 
         open = false
         pinger?.cancel(false)
         onState()
-        if (!closed) timer.schedule({ connect() }, if (outdated) 60_000L else 1500L, TimeUnit.MILLISECONDS)
+        // a little randomness, so a relay restart is not met by every phone at the same instant
+        if (!closed) timer.schedule({ connect() }, if (outdated) 60_000L else 500L + (Math.random() * 1500).toLong(), TimeUnit.MILLISECONDS)
     }
 
     fun send(m: JSONObject): Boolean = open && ws?.send(m.toString()) == true

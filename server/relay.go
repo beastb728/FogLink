@@ -141,6 +141,7 @@ type Hub struct {
 	mu        sync.RWMutex
 	byID      map[string]*client
 	observers map[*client]struct{}
+	conns     map[*client]*websocket.Conn
 
 	connected atomic.Int64
 	events    atomic.Int64
@@ -151,7 +152,7 @@ type Hub struct {
 }
 
 func NewHub(store Store, observerToken string) *Hub {
-	return &Hub{store: store, observerToken: observerToken, byID: map[string]*client{}, observers: map[*client]struct{}{}, perIP: map[string]int{}, lat: make([]float64, 0, 2048)}
+	return &Hub{store: store, observerToken: observerToken, byID: map[string]*client{}, observers: map[*client]struct{}{}, conns: map[*client]*websocket.Conn{}, perIP: map[string]int{}, lat: make([]float64, 0, 2048)}
 }
 
 func valid(m *Msg) bool {
@@ -336,6 +337,7 @@ func (h *Hub) drop(c *client) {
 		delete(h.byID, c.id)
 	}
 	delete(h.observers, c)
+	delete(h.conns, c)
 	h.mu.Unlock()
 	if c.id != "" {
 		h.store.Remove(context.Background(), c.id)
@@ -375,6 +377,9 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		c.world, hello.World = simWorld, "sim"
 	}
 	h.send(c, hello)
+	h.mu.Lock()
+	h.conns[c] = ws
+	h.mu.Unlock()
 	h.connected.Add(1)
 	defer h.connected.Add(-1)
 	defer h.drop(c)
@@ -403,6 +408,32 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		if json.Unmarshal(data, &m) == nil {
 			h.handle(ctx, c, &m)
 		}
+	}
+}
+
+// Shutdown tells every phone the relay is restarting, so they reconnect at once
+// instead of waiting to notice a dead connection. Positions are rebuilt from the
+// phones' next reports, a second or so after they are back.
+func (h *Hub) Shutdown() {
+	h.mu.RLock()
+	all := make([]*websocket.Conn, 0, len(h.conns))
+	for _, ws := range h.conns {
+		all = append(all, ws)
+	}
+	h.mu.RUnlock()
+	var wg sync.WaitGroup
+	for _, ws := range all {
+		wg.Add(1)
+		go func(ws *websocket.Conn) {
+			defer wg.Done()
+			ws.Close(websocket.StatusServiceRestart, "restarting")
+		}(ws)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
 	}
 }
 

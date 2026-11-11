@@ -51,6 +51,10 @@ class Prefs(ctx: Context) {
         get() = p.getString("relay", BuildConfig.DEFAULT_RELAY)!!
         set(v) = p.edit().putString("relay", v).apply()
 
+    /** The driver switched Fog mode on and has not switched it off: restore it if Android restarts the service. */
+    var fogWanted: Boolean
+        get() = p.getBoolean("fogWanted", false)
+        set(v) = p.edit().putBoolean("fogWanted", v).apply()
     /** Developer mode: shows the relay address, the demo position and the drive logger. */
     var dev: Boolean
         get() = p.getBoolean("dev", false)
